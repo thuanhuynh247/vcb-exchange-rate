@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.xlsx
+*.log
+*.zip
+Backup/
+scratch/
+.tempmediaStorage/
+*.csv
+*.json
+temp_api_response.json
+temp_current_data.csv
