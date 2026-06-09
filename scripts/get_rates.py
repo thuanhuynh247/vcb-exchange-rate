@@ -1,3 +1,10 @@
+import os
+os.makedirs(r"D:\Tygia-Tudong\Temp", exist_ok=True)
+os.environ["TEMP"] = r"D:\Tygia-Tudong\Temp"
+os.environ["TMP"] = r"D:\Tygia-Tudong\Temp"
+os.environ["OPENPYXL_LXML"] = "False"
+import openpyxl
+openpyxl.xml.LXML = False
 import requests
 import pandas as pd
 from datetime import datetime
@@ -230,6 +237,42 @@ def fetch_vietinbank_usd():
                     }
     except Exception as e:
         logger.error(f"Lỗi VietinBank Server Action: {e}")
+        
+    # Fallback to history Server Action API
+    logger.info("Thử lấy tỷ giá VietinBank qua Server Action Lịch Sử...")
+    action_history = "ff24b60505a8da357a655878afe7dd2d1f9f0e52"
+    h["next-action"] = action_history
+    try:
+        # Fetch transfer rate
+        r_tf = requests.post(url, headers=h, data=json.dumps([date_str, date_str, "USD", "transfer_rate"]),
+                             verify=False, timeout=15)
+        transfer_val = None
+        for line in r_tf.text.strip().split('\n'):
+            if line.startswith("1:"):
+                data = json.loads(line[2:])
+                if data and isinstance(data, list) and len(data) > 0:
+                    transfer_val = data[0].get('close', data[0].get('open'))
+                    
+        # Fetch sell rate
+        r_sell = requests.post(url, headers=h, data=json.dumps([date_str, date_str, "USD", "sell_rate"]),
+                               verify=False, timeout=15)
+        sell_val = None
+        for line in r_sell.text.strip().split('\n'):
+            if line.startswith("1:"):
+                data = json.loads(line[2:])
+                if data and isinstance(data, list) and len(data) > 0:
+                    sell_val = data[0].get('close', data[0].get('open'))
+                    
+        if transfer_val or sell_val:
+            return {
+                "bank": "VietinBank",
+                "buy_cash": transfer_val,
+                "buy_transfer": transfer_val,
+                "sell": sell_val
+            }
+    except Exception as e:
+        logger.error(f"Lỗi VietinBank Server Action Lịch Sử: {e}")
+        
     return {"bank": "VietinBank", "buy_cash": None, "buy_transfer": None, "sell": None}
 
 

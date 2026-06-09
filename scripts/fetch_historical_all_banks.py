@@ -13,6 +13,13 @@ API endpoints discovered:
 - SeaBank: POST https://www.seabank.com.vn/cong-cu-tien-ich/ty-gia (Server Action)
   - next-action d65f2411081b93638167328d79ca76cf2bc7ec18, payload ["DD/MM/YYYY"]
 """
+import os
+os.makedirs(r"D:\Tygia-Tudong\Temp", exist_ok=True)
+os.environ["TEMP"] = r"D:\Tygia-Tudong\Temp"
+os.environ["TMP"] = r"D:\Tygia-Tudong\Temp"
+os.environ["OPENPYXL_LXML"] = "False"
+import openpyxl
+openpyxl.xml.LXML = False
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
