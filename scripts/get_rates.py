@@ -858,8 +858,34 @@ def save_to_excel(data, filename):
     try:
         # Bước 1: Ghi sheet Data vào file tạm
         logger.info("Bước 1/3: Ghi sheet Data...")
-        with pd.ExcelWriter(temp_filename, engine='openpyxl') as writer:
-            df_combined.to_excel(writer, sheet_name='Data', index=False)
+        import shutil
+        if os.path.exists(filename) and os.path.getsize(filename) > 0:
+            shutil.copy2(filename, temp_filename)
+            logger.info("Preserved existing sheets by copying file to temp_filename.")
+            # Overwrite only the Data sheet
+            wb = load_workbook(temp_filename)
+            if 'Data' in wb.sheetnames:
+                ws_data = wb['Data']
+                ws_data.delete_rows(1, ws_data.max_row + 10)
+            else:
+                ws_data = wb.create_sheet('Data')
+            
+            # Write df_combined to ws_data
+            # Headers
+            for col_idx, col_name in enumerate(df_combined.columns, 1):
+                ws_data.cell(row=1, column=col_idx, value=col_name)
+            # Data rows
+            for row_idx, row_vals in enumerate(df_combined.values, 2):
+                for col_idx, val in enumerate(row_vals, 1):
+                    if pd.isna(val):
+                        ws_data.cell(row=row_idx, column=col_idx, value=None)
+                    else:
+                        ws_data.cell(row=row_idx, column=col_idx, value=val)
+            wb.save(temp_filename)
+            wb.close()
+        else:
+            with pd.ExcelWriter(temp_filename, engine='openpyxl') as writer:
+                df_combined.to_excel(writer, sheet_name='Data', index=False)
 
         # Bước 2: Format Data sheet
         logger.info("Bước 2/3: Format Data sheet...")
