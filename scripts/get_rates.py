@@ -687,7 +687,7 @@ def close_excel_if_file_open(filename):
 
 
 def _restore_latest_backup(filename):
-    """Tìm bản sao lưu gần nhất có dung lượng > 0 và khôi phục nó."""
+    """Tìm bản sao lưu gần nhất có dung lượng > 0, kiểm tra tính hợp lệ bằng openpyxl và khôi phục nó."""
     import shutil
     try:
         backup_dir = os.path.join(os.path.dirname(filename), 'Backup')
@@ -706,11 +706,20 @@ def _restore_latest_backup(filename):
             return False
             
         backups.sort(key=lambda x: x[1], reverse=True)
-        latest_backup = backups[0][0]
         
-        logger.info(f"Đang khôi phục từ bản sao lưu: {os.path.basename(latest_backup)} ({os.path.getsize(latest_backup)} bytes)")
-        shutil.copy2(latest_backup, filename)
-        return True
+        for backup_path, _ in backups:
+            try:
+                # Kiểm tra tính toàn vẹn của backup
+                wb_check = load_workbook(backup_path, read_only=True)
+                wb_check.close()
+                # Nếu hợp lệ, tiến hành khôi phục
+                logger.info(f"Đang khôi phục từ bản sao lưu hợp lệ: {os.path.basename(backup_path)} ({os.path.getsize(backup_path)} bytes)")
+                shutil.copy2(backup_path, filename)
+                return True
+            except Exception as e_check:
+                logger.warning(f"Bản sao lưu {os.path.basename(backup_path)} bị lỗi cấu trúc ({e_check}). Thử bản tiếp theo...")
+        
+        return False
     except Exception as e:
         logger.error(f"Lỗi khi khôi phục bản sao lưu: {e}")
         return False
@@ -806,9 +815,19 @@ def save_to_excel(data, filename):
     has_existing = False
 
     if os.path.exists(filename):
-        # Kiểm tra file bị 0 bytes
+        # Kiểm tra file bị 0 bytes hoặc bị lỗi cấu trúc zip (openpyxl không load được)
+        file_valid = True
         if os.path.getsize(filename) == 0:
-            logger.warning("Phát hiện file chính bị 0 bytes. Đang tiến hành khôi phục từ bản sao lưu...")
+            file_valid = False
+        else:
+            try:
+                wb_check = load_workbook(filename, read_only=True)
+                wb_check.close()
+            except Exception as e_check:
+                logger.warning(f"Phát hiện file chính bị lỗi cấu trúc ({e_check}). Đang tiến hành khôi phục từ bản sao lưu...")
+                file_valid = False
+        
+        if not file_valid:
             _restore_latest_backup(filename)
 
         try:
@@ -1743,8 +1762,45 @@ def _create_usd_monthly_sheet(wb):
         ws[f'{col}{avg_row_idx}'].border = thin_border
 
 
+def get_exchange_rates_json_fallback():
+    """Fallback to get VCB exchange rates from the modern JSON API if the XML portal fails."""
+    logger.info("Thử lấy tỷ giá VCB qua API JSON fallback...")
+    url = 'https://www.vietcombank.com.vn/api/exchangerates'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+    }
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    try:
+        resp = requests.get(url, params={'date': date_str}, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            update_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            rates = []
+            for item in data.get('Data', []):
+                currency_code = item.get('currencyCode', '').strip()
+                currency_name = item.get('currencyName', '').strip()
+                buy = item.get('cash')
+                transfer = item.get('transfer')
+                sell = item.get('sell')
+                
+                rates.append({
+                    'Ngày Cập Nhật': update_time_str,
+                    'Mã Ngoại Tệ': currency_code,
+                    'Tên Ngoại Tệ': currency_name,
+                    'Mua Tiền Mặt': _to_float(buy),
+                    'Mua Chuyển Khoản': _to_float(transfer),
+                    'Bán': _to_float(sell)
+                })
+            if rates:
+                logger.info(f"Lấy thành công {len(rates)} ngoại tệ qua API JSON.")
+                return rates
+    except Exception as e:
+        logger.error(f"Lỗi khi gọi API JSON fallback: {e}")
+    return None
+
+
 def get_exchange_rates_with_retry():
-    """Fetch rates with retry logic."""
+    """Fetch rates with retry logic and JSON fallback."""
     for attempt in range(1, RETRY_COUNT + 1):
         logger.info(f"Lần thử {attempt}/{RETRY_COUNT}...")
         rates = get_exchange_rates()
@@ -1754,7 +1810,13 @@ def get_exchange_rates_with_retry():
         if attempt < RETRY_COUNT:
             logger.warning(f"Thất bại lần {attempt}. Thử lại sau {RETRY_DELAY}s...")
             time.sleep(RETRY_DELAY)
-    logger.error(f"Thất bại sau {RETRY_COUNT} lần thử.")
+            
+    logger.warning(f"Thất bại sau {RETRY_COUNT} lần thử qua XML. Đang chuyển sang API JSON fallback...")
+    rates = get_exchange_rates_json_fallback()
+    if rates:
+        return rates
+        
+    logger.error("KHÔNG thể lấy dữ liệu tỷ giá từ cả hai nguồn!")
     return None
 
 
