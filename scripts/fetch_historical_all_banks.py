@@ -523,10 +523,25 @@ def main():
         except:
             return datetime.min
             
-    sorted_rows = sorted(new_records, key=lambda x: (parse_date_key(x), x[1]), reverse=True)
-    for r_idx, row_vals in enumerate(sorted_rows, 2):
+    df_temp = pd.DataFrame(new_records, columns=['Ngày Cập Nhật', 'Ngân Hàng', 'Mua Tiền Mặt', 'Mua Chuyển Khoản', 'Bán'])
+    df_temp['_parsed_date'] = df_temp['Ngày Cập Nhật'].apply(parse_date_key)
+    
+    # Sort chronologically to forward fill
+    df_temp = df_temp.sort_values(by=['Ngân Hàng', '_parsed_date'])
+    df_temp['Mua Tiền Mặt'] = df_temp.groupby('Ngân Hàng')['Mua Tiền Mặt'].ffill().bfill()
+    df_temp['Mua Chuyển Khoản'] = df_temp.groupby('Ngân Hàng')['Mua Chuyển Khoản'].ffill().bfill()
+    df_temp['Bán'] = df_temp.groupby('Ngân Hàng')['Bán'].ffill().bfill()
+    
+    # Sort back to descending order
+    df_temp = df_temp.sort_values(by=['_parsed_date', 'Ngân Hàng'], ascending=[False, True])
+    df_temp.drop(columns=['_parsed_date'], inplace=True)
+    
+    for r_idx, row_vals in enumerate(df_temp.values, 2):
         for c_idx, val in enumerate(row_vals, 1):
-            ws_data.cell(r_idx, c_idx, val)
+            if pd.isna(val):
+                ws_data.cell(r_idx, c_idx, None)
+            else:
+                ws_data.cell(r_idx, c_idx, val)
             
     print("📈 Đang xây dựng Dashboard TheoDoi_USD...")
     sys.path.insert(0, r'D:\Tygia-Tudong\scripts')
