@@ -8,5 +8,7 @@ scratch/
 .tempmediaStorage/
 *.csv
 *.json
-temp_api_response.json
-temp_current_data.csv
+Temp/
+tmp/
+*.txt
+test_playwright.py

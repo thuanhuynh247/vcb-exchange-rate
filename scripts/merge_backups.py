@@ -5,8 +5,8 @@ import pandas as pd
 import os
 import sys
 
-OUTPUT_FILE = r'C:\Users\THUAN\Documents\TyGia_Banking.xlsx'
-BACKUP_DIR = r'C:\Users\THUAN\Documents\Backup'
+OUTPUT_FILE = r'D:\Tygia-Tudong\TyGia_Banking.xlsx'
+BACKUP_DIR = r'D:\Tygia-Tudong\Backup'
 
 EXPECTED_COLS = ['Ngày Cập Nhật', 'Mã Ngoại Tệ', 'Tên Ngoại Tệ',
                  'Mua Tiền Mặt', 'Mua Chuyển Khoản', 'Bán']

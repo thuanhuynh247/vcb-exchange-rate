@@ -10,8 +10,8 @@ import concurrent.futures
 import os, sys
 
 API_URL = 'https://www.vietcombank.com.vn/api/exchangerates'
-OUTPUT_FILE = r'C:\Users\THUAN\Documents\TyGia_Banking.xlsx'
-CSV_FILE = r'C:\Users\THUAN\Documents\vcb_2026_raw.csv'
+OUTPUT_FILE = r'D:\Tygia-Tudong\TyGia_Banking.xlsx'
+CSV_FILE = r'D:\Tygia-Tudong\vcb_2026_raw.csv'
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
 CURRENCY_NAMES = {

@@ -16,21 +16,18 @@ Tự động lấy tỷ giá **tất cả ngoại tệ** từ Vietcombank và t�
 - Chạy tự động hằng ngày qua Task Scheduler (18h00) hoặc chạy thủ công.
 - Lấy **tất cả 20+ ngoại tệ** từ XML API của VCB.
 - Ghi dữ liệu cộng dồn vào sheet **Data** (có AutoFilter, dễ tìm kiếm).
-- **Thu thập tỷ giá USD đa ngân hàng (Pure Python - Không dùng Playwright)**:
+- **Thu thập tỷ giá USD đa ngân hàng**:
   - **Vietcombank**: XML API.
   - **BIDV**: JSON API (`ExchangeDetailServlet`).
   - **Techcombank**: Integration JSON API.
   - **ACB**: REST API (`effectiveDateTime` filter).
-  - **VietinBank & SeaBank**: Request HTTPS trực tiếp sử dụng session CSRF token handlers, loại bỏ hoàn toàn Playwright giúp chạy cực nhanh và tin cậy.
+  - **VietinBank & SeaBank**: Dùng Playwright/Chromium để crawl dữ liệu Real-time an toàn, bỏ qua các vấn đề chặn CORS/Cloudflare.
 - Ghi dữ liệu USD cộng dồn ẩn vào sheet **Data_TheoDoi_USD**.
-- Tạo sheet **TheoDoi_USD** (So sánh ngày nâng cao):
+- Tạo sheet **TheoDoi_USD** nâng cao:
   - **Date Picker** (B4): dropdown chọn ngày xem tỷ giá.
   - **So sánh ngày** (E4): dropdown chọn ngày so sánh (hiển thị chênh lệch giá trị và % thay đổi).
-  - **Tìm giá trị tốt nhất (Conditional Formatting)**: Tự động highlight ngân hàng có giá mua cao nhất (Xanh lá) và ngân hàng có giá bán thấp nhất (Vàng).
+  - **Tìm giá trị tốt nhất (Conditional Formatting)**: Tự động highlight ngân hàng có giá mua cao nhất (Xanh lá) và ngân hàng có giá bán thấp nhất (Vàng) giúp tối ưu giao dịch.
   - **Biểu đồ so sánh**: Cột biểu đồ BarChart so sánh trực quan giá Mua/Bán giữa 6 ngân hàng.
-- Tạo sheet **TheoDoi_Thang_USD** (Báo cáo tháng):
-  - **Dropdown chọn Năm, Tháng, Ngân hàng**: Cho phép xem toàn bộ lịch sử các ngày trong tháng của ngân hàng được chọn.
-  - **Bình quân tháng**: Tự động tính giá trị trung bình cả tháng cho các tỷ giá (Mua TM, Mua CK, Bán, Bình quân).
 - **Tính năng tự phục hồi & Dọn dẹp**:
   - Tự động đóng Excel (`taskkill`) nếu file đang bị mở (tránh khóa file khi ghi).
   - Tự động kiểm tra dung lượng trống ổ D, nếu `< 500MB` tiến hành dọn dẹp thư mục Temp và các bản backup cũ để giải phóng không gian.
@@ -49,7 +46,7 @@ Tự động lấy tỷ giá **tất cả ngoại tệ** từ Vietcombank và t�
 - Output: `TyGia_Banking_YYYYMMDD.pdf` trong Documents.
 
 ## Script kiểm tra: `scripts/test_excel.py`
-- Kiểm tra cấu trúc file Excel, format, Dashboard, Date Picker, so sánh 2 ngày, so sánh ngân hàng, biểu đồ, log file, báo cáo tháng.
+- Kiểm tra cấu trúc file Excel, format, Dashboard, Date Picker, so sánh 2 ngày, so sánh ngân hàng, biểu đồ, log file.
 
 ## Cài đặt Task Scheduler: `scripts/setup_schedule.ps1`
 - Chạy bằng PowerShell (Admin) để đăng ký Task Scheduler.
@@ -67,12 +64,6 @@ Tự động lấy tỷ giá **tất cả ngoại tệ** từ Vietcombank và t�
   - Ô có giá Bán thấp nhất được tô màu vàng (#FFEB3B) với chữ xanh ô-liu (#827717).
   - Cột Chênh lệch tự động đổi màu Đỏ khi tăng giá bán, Xanh lá khi giảm giá bán.
 - **Biểu đồ**: Cột BarChart tự động cập nhật theo ngày được chọn ở Date Picker.
-
-### Sheet "TheoDoi_Thang_USD"
-- **Dropdown chọn Năm (C4), Tháng (F4), Ngân Hàng (H4)**.
-- Liệt kê toàn bộ các ngày từ 1-31 của tháng đã chọn.
-- Sử dụng công thức `SUMIFS` kết hợp định dạng chuỗi `TEXT(C{row}, "dd/mm/yyyy")` để đối chiếu từ sheet lưu trữ dữ liệu `Data_TheoDoi_USD`.
-- Dòng 38: Tính giá trị **BÌNH QUÂN THÁNG** bằng công thức `=IFERROR(AVERAGE(E7:E37), "-")`.
 
 ### Sheet "Data"
 | Ngày Cập Nhật | Mã Ngoại Tệ | Tên Ngoại Tệ | Mua Tiền Mặt | Mua Chuyển Khoản | Bán     |

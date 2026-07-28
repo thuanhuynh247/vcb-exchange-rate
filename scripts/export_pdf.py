@@ -16,8 +16,8 @@ from datetime import datetime
 import pandas as pd
 from fpdf import FPDF
 
-INPUT_FILE = r'C:\Users\THUAN\Documents\TyGia_Banking.xlsx'
-OUTPUT_DIR = r'C:\Users\THUAN\Documents'
+INPUT_FILE = r'D:\Tygia-Tudong\TyGia_Banking.xlsx'
+OUTPUT_DIR = r'D:\Tygia-Tudong'
 
 # Thứ tự hiển thị ngoại tệ chính (giống website VCB)
 PRIORITY_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'SGD',

@@ -13,7 +13,7 @@ from openpyxl.utils import get_column_letter
 
 # ── Config ──────────────────────────────────────────────────────────────
 API_URL = 'https://www.vietcombank.com.vn/api/exchangerates'
-OUTPUT_FILE = r'C:\Users\THUAN\Documents\TyGia_Banking.xlsx'
+OUTPUT_FILE = r'D:\Tygia-Tudong\TyGia_Banking.xlsx'
 START_DATE = datetime(2025, 1, 1)
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '

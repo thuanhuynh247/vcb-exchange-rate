@@ -7,7 +7,7 @@ import openpyxl
 openpyxl.xml.LXML = False
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 import os
 import logging
@@ -814,12 +814,100 @@ def check_disk_space_and_clean():
         logger.error(f"Lỗi khi kiểm tra/dọn dẹp dung lượng ổ đĩa: {e}")
 
 
+CURRENCY_NAMES = {
+    'USD': 'US DOLLAR', 'EUR': 'EURO', 'GBP': 'POUND STERLING',
+    'JPY': 'YEN', 'AUD': 'AUSTRALIAN DOLLAR', 'CAD': 'CANADIAN DOLLAR',
+    'CHF': 'SWISS FRANC', 'SGD': 'SINGAPORE DOLLAR', 'CNY': 'YUAN RENMINBI',
+    'HKD': 'HONGKONG DOLLAR', 'THB': 'THAILAND BAHT', 'KRW': 'KOREAN WON',
+    'MYR': 'MALAYSIAN RINGGIT', 'INR': 'INDIAN RUPEE', 'KWD': 'KUWAITI DINAR',
+    'SAR': 'SAUDI RIAL', 'NOK': 'NORWEGIAN KRONER', 'SEK': 'SWEDISH KRONA',
+    'DKK': 'DANISH KRONE', 'RUB': 'RUSSIAN RUBLE',
+}
+
+_process_lock_file = None
+
+def acquire_process_lock():
+    """Ensure only one instance of get_rates.py runs at a time using a file lock."""
+    global _process_lock_file
+    lock_path = r'D:\Tygia-Tudong\Temp\get_rates.lock'
+    os.makedirs(r'D:\Tygia-Tudong\Temp', exist_ok=True)
+    try:
+        import msvcrt
+        f = open(lock_path, 'w')
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        _process_lock_file = f
+        return True
+    except (IOError, OSError):
+        logger.warning("⚠️ Một tiến trình get_rates.py khác đang chạy. Dừng tiến trình hiện tại để tránh xung đột file.")
+        return False
+    except Exception:
+        return True
+
+def release_process_lock():
+    """Release process lock file."""
+    global _process_lock_file
+    if _process_lock_file:
+        try:
+            import msvcrt
+            _process_lock_file.seek(0)
+            msvcrt.locking(_process_lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            _process_lock_file.close()
+        except Exception:
+            pass
+        _process_lock_file = None
+
+def fetch_missing_historical_rates(existing_dates_set, max_days_back=30):
+    """Tự động kiểm tra và tải bổ sung các ngày bị thiếu trong quá khứ."""
+    today = datetime.now()
+    missing_records = []
+    
+    dates_to_check = []
+    for i in range(1, max_days_back + 1):
+        d = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+        if d not in existing_dates_set:
+            dates_to_check.append(d)
+            
+    if not dates_to_check:
+        return missing_records
+        
+    logger.info(f"🔍 Phát hiện {len(dates_to_check)} ngày thiếu trong lịch sử gần đây: {dates_to_check}. Tiến hành tải bổ sung...")
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+    
+    for d_str in dates_to_check:
+        url = f'https://www.vietcombank.com.vn/api/exchangerates?date={d_str}'
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                api_date = data.get('Date', d_str)[:10]
+                update_str = api_date + ' 18:00:00'
+                for item in data.get('Data', []):
+                    code = item.get('currencyCode')
+                    if code:
+                        missing_records.append({
+                            'Ngày Cập Nhật': update_str,
+                            'Mã Ngoại Tệ': code,
+                            'Tên Ngoại Tệ': CURRENCY_NAMES.get(code, item.get('currencyName', '').strip()),
+                            'Mua Tiền Mặt': _to_float(item.get('cash')),
+                            'Mua Chuyển Khoản': _to_float(item.get('transfer')),
+                            'Bán': _to_float(item.get('sell'))
+                        })
+                logger.info(f"  ✅ Đã tải bổ sung thành công ngày {d_str}")
+        except Exception as e:
+            logger.warning(f"  ⚠ Không thể tải bổ sung ngày {d_str}: {e}")
+            
+    return missing_records
+
+
 def save_to_excel(data, filename):
     if not data:
         return
 
     # Tắt file Excel nếu đang mở để tránh bị lock khi ghi
     close_excel_if_file_open(filename)
+    time.sleep(1)
     
     # Kiểm tra dung lượng ổ đĩa và dọn dẹp trước khi ghi
     check_disk_space_and_clean()
@@ -952,7 +1040,7 @@ def save_to_excel(data, filename):
             current_date_str = datetime.now().strftime('%d/%m/%Y')
             if vcb_usd_data and len(data) > 0 and 'Ngày Cập Nhật' in data[0]:
                 try:
-                    dt = pd.to_datetime(data[0]['Ngày Cập Nhật'])
+                    dt = pd.to_datetime(data[0]['Ngày Cập Nhật'], format='mixed')
                     current_date_str = dt.strftime('%d/%m/%Y')
                 except Exception as ex_dt:
                     logger.warning(f"Không thể parse Ngày Cập Nhật: {ex_dt}")
@@ -968,23 +1056,45 @@ def save_to_excel(data, filename):
             import traceback
             logger.error(traceback.format_exc())
 
+        # Kiểm tra tính toàn vẹn của file tạm trước khi ghi đè
+        try:
+            wb_val = load_workbook(temp_filename, read_only=True)
+            for req_sheet in ['Data', 'Dashboard']:
+                if req_sheet not in wb_val.sheetnames:
+                    raise ValueError(f"File tạm thiếu sheet bắt buộc '{req_sheet}'")
+            wb_val.close()
+        except Exception as e_val:
+            logger.error(f"❌ File tạm bị lỗi cấu trúc ({e_val}). Hủy ghi đè để bảo vệ dữ liệu gốc.")
+            if os.path.exists(temp_filename):
+                try:
+                    os.remove(temp_filename)
+                except Exception:
+                    pass
+            return
+
         # Tạo backup cho file chính hiện tại TRƯỚC khi đè file tạm lên
-        # (Chỉ tạo backup nếu file chính tồn tại và dung lượng > 0 để tránh lưu backup lỗi)
         if os.path.exists(filename) and os.path.getsize(filename) > 0:
             backup_excel(filename)
 
-        # Đè file tạm lên file chính một cách an toàn bằng os.replace (tránh mất file gốc nếu rename lỗi)
-        if os.path.exists(filename):
+        # Đè file tạm lên file chính một cách an toàn bằng os.replace (có retry loop)
+        success_replace = False
+        for attempt in range(5):
             try:
-                os.replace(temp_filename, filename)
-            except OSError:
-                # Nếu bị lock, cố gắng tắt Excel và thử lại
+                if os.path.exists(filename):
+                    os.replace(temp_filename, filename)
+                else:
+                    os.replace(temp_filename, filename)
+                success_replace = True
+                break
+            except OSError as e_os:
+                logger.warning(f"Thử thay thế file lần {attempt+1}/5 thất bại ({e_os}). Tắt Excel và thử lại...")
                 close_excel_if_file_open(filename)
-                os.replace(temp_filename, filename)
-        else:
-            os.replace(temp_filename, filename)
+                time.sleep(1)
 
-        logger.info(f"✅ Đã cập nhật xong Dashboard: {filename}")
+        if success_replace:
+            logger.info(f"✅ Đã cập nhật xong Dashboard: {filename}")
+        else:
+            logger.error(f"❌ Không thể ghi đè file {filename} sau 5 lần thử.")
 
     except Exception as e:
         logger.error(f"❌ Lỗi ghi file Excel: {e}")
@@ -1835,14 +1945,34 @@ def get_exchange_rates_with_retry():
 
 
 if __name__ == "__main__":
-    logger.info("=" * 50)
-    logger.info("Bắt đầu cập nhật tỷ giá VCB")
-    
-    rates = get_exchange_rates_with_retry()
-    if rates:
-        save_to_excel(rates, OUTPUT_FILE)
-        logger.info("Hoàn tất cập nhật tỷ giá.")
-        send_notification("Tỷ Giá VCB", f"Cập nhật thành công {len(rates)} ngoại tệ")
-    else:
-        logger.error("KHÔNG thể lấy dữ liệu tỷ giá!")
-        send_notification("Tỷ Giá VCB - LỖI", "Không thể lấy dữ liệu tỷ giá VCB!")
+    import sys
+    if not acquire_process_lock():
+        sys.exit(0)
+        
+    try:
+        logger.info("=" * 50)
+        logger.info("Bắt đầu cập nhật tỷ giá VCB")
+        
+        rates = get_exchange_rates_with_retry()
+        if rates:
+            # Tự động rà soát ngày thiếu trong 30 ngày gần nhất
+            existing_dates_set = set()
+            if os.path.exists(OUTPUT_FILE):
+                try:
+                    df_old_check = pd.read_excel(OUTPUT_FILE, sheet_name='Data')
+                    existing_dates_set = set(pd.to_datetime(df_old_check['Ngày Cập Nhật'], format='mixed').dt.strftime('%Y-%m-%d').dropna())
+                except Exception as e_dates:
+                    logger.warning(f"Không thể đọc danh sách ngày cũ từ file chính: {e_dates}")
+            
+            missing_rates = fetch_missing_historical_rates(existing_dates_set, max_days_back=30)
+            if missing_rates:
+                rates.extend(missing_rates)
+                
+            save_to_excel(rates, OUTPUT_FILE)
+            logger.info("Hoàn tất cập nhật tỷ giá.")
+            send_notification("Tỷ Giá VCB", f"Cập nhật thành công {len(rates)} bản ghi tỷ giá")
+        else:
+            logger.error("KHÔNG thể lấy dữ liệu tỷ giá!")
+            send_notification("Tỷ Giá VCB - LỖI", "Không thể lấy dữ liệu tỷ giá VCB!")
+    finally:
+        release_process_lock()

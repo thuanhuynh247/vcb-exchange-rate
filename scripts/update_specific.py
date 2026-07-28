@@ -12,7 +12,7 @@ if script_dir not in sys.path:
 from get_rates import save_to_excel, logger
 
 API_URL = 'https://www.vietcombank.com.vn/api/exchangerates'
-OUTPUT_FILE = r'C:\Users\THUAN\Documents\TyGia_Banking.xlsx'
+OUTPUT_FILE = r'D:\Tygia-Tudong\TyGia_Banking.xlsx'
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 }
