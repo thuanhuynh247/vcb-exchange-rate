@@ -949,8 +949,8 @@ def save_to_excel(data, filename):
         if has_existing:
             try:
                 # Normalize dates and deduplicate
-                df_existing['_date_key'] = pd.to_datetime(df_existing['Ngày Cập Nhật'], format='mixed').dt.strftime('%Y-%m-%d')
-                df_new['_date_key'] = pd.to_datetime(df_new['Ngày Cập Nhật'], format='mixed').dt.strftime('%Y-%m-%d')
+                df_existing['_date_key'] = pd.to_datetime(df_existing['Ngày Cập Nhật'], dayfirst=True, format='mixed').dt.strftime('%Y-%m-%d')
+                df_new['_date_key'] = pd.to_datetime(df_new['Ngày Cập Nhật'], dayfirst=True, format='mixed').dt.strftime('%Y-%m-%d')
 
                 df_combined = pd.concat([df_new, df_existing], ignore_index=True)
                 df_combined = df_combined.drop_duplicates(subset=['_date_key', 'Mã Ngoại Tệ'], keep='first')
@@ -1040,7 +1040,7 @@ def save_to_excel(data, filename):
             current_date_str = datetime.now().strftime('%d/%m/%Y')
             if vcb_usd_data and len(data) > 0 and 'Ngày Cập Nhật' in data[0]:
                 try:
-                    dt = pd.to_datetime(data[0]['Ngày Cập Nhật'], format='mixed')
+                    dt = pd.to_datetime(data[0]['Ngày Cập Nhật'], dayfirst=True, format='mixed')
                     current_date_str = dt.strftime('%d/%m/%Y')
                 except Exception as ex_dt:
                     logger.warning(f"Không thể parse Ngày Cập Nhật: {ex_dt}")
@@ -1171,7 +1171,7 @@ def _create_dashboard_with_date_picker(wb, df):
     
     # ── Chuẩn bị dữ liệu ──
     df_work = df.copy()
-    df_work['_date_key'] = pd.to_datetime(df_work['Ngày Cập Nhật'], format='mixed').dt.strftime('%Y-%m-%d')
+    df_work['_date_key'] = pd.to_datetime(df_work['Ngày Cập Nhật'], dayfirst=True, format='mixed').dt.strftime('%Y-%m-%d')
     
     # Danh sách ngày unique, sắp xếp giảm dần (mới nhất trước)
     unique_dates = sorted(df_work['_date_key'].unique(), reverse=True)
@@ -1566,7 +1566,7 @@ def _create_dashboard_with_date_picker(wb, df):
     ws_chart_data.sheet_state = 'hidden'
     
     df_chart = df.copy()
-    df_chart['Ngày'] = pd.to_datetime(df_chart['Ngày Cập Nhật'], format='mixed')
+    df_chart['Ngày'] = pd.to_datetime(df_chart['Ngày Cập Nhật'], dayfirst=True, format='mixed')
     df_chart['Tháng'] = df_chart['Ngày'].dt.to_period('M')
     
     # Build monthly averages for ALL currencies
@@ -1960,7 +1960,7 @@ if __name__ == "__main__":
             if os.path.exists(OUTPUT_FILE):
                 try:
                     df_old_check = pd.read_excel(OUTPUT_FILE, sheet_name='Data')
-                    existing_dates_set = set(pd.to_datetime(df_old_check['Ngày Cập Nhật'], format='mixed').dt.strftime('%Y-%m-%d').dropna())
+                    existing_dates_set = set(pd.to_datetime(df_old_check['Ngày Cập Nhật'], dayfirst=True, format='mixed').dt.strftime('%Y-%m-%d').dropna())
                 except Exception as e_dates:
                     logger.warning(f"Không thể đọc danh sách ngày cũ từ file chính: {e_dates}")
             

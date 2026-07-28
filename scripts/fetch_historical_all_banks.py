@@ -302,6 +302,9 @@ def fetch_acb_usd_api(date_str_yyyy_mm_dd):
         pass
     return None
 
+def is_valid_rate_dict(d):
+    return bool(d and isinstance(d, dict) and (d.get('buy_transfer') is not None or d.get('sell') is not None or d.get('buy_cash') is not None))
+
 def main():
     print("🚀 Bắt đầu backfill tỷ giá USD các ngân hàng (API thực tế)...")
     if not os.path.exists(OUTPUT_FILE):
@@ -399,7 +402,7 @@ def main():
         all_exist = True
         for bank in BANKS:
             r = existing_records.get((date_dd, bank))
-            if not r or (r.get('buy_transfer') is None and r.get('sell') is None):
+            if not is_valid_rate_dict(r):
                 all_exist = False
                 break
                 
@@ -412,53 +415,53 @@ def main():
 
         # A. VCB
         vcb_usd = existing_records.get((date_dd, 'Vietcombank'))
-        if not vcb_usd or (vcb_usd.get('buy_transfer') is None and vcb_usd.get('sell') is None):
+        if not is_valid_rate_dict(vcb_usd):
             vcb_usd = vcb_rates_from_sheet.get(date_yyyy) or vcb_rates_from_sheet.get(date_dd)
-            if not vcb_usd:
+            if not is_valid_rate_dict(vcb_usd):
                 vcb_usd = fetch_vcb_usd_api(date_yyyy)
-                if vcb_usd:
+                if is_valid_rate_dict(vcb_usd):
                     vcb_rates_from_sheet[date_yyyy] = vcb_usd
                     vcb_rates_from_sheet[date_dd] = vcb_usd
-        if not vcb_usd:
+        if not is_valid_rate_dict(vcb_usd):
             return []
 
         # B. BIDV
         bidv_usd = existing_records.get((date_dd, 'BIDV'))
-        if not bidv_usd or (bidv_usd.get('buy_transfer') is None and bidv_usd.get('sell') is None):
+        if not is_valid_rate_dict(bidv_usd):
             bidv_usd = fetch_bidv_usd_api(date_dd)
-        if not bidv_usd:
+        if not is_valid_rate_dict(bidv_usd):
             bidv_usd = {'buy_cash': None, 'buy_transfer': None, 'sell': None}
 
         # C. ACB
         acb_usd = existing_records.get((date_dd, 'ACB'))
-        if not acb_usd or (acb_usd.get('buy_transfer') is None and acb_usd.get('sell') is None):
+        if not is_valid_rate_dict(acb_usd):
             acb_usd = fetch_acb_usd_api(date_yyyy)
-        if not acb_usd:
+        if not is_valid_rate_dict(acb_usd):
             acb_usd = {'buy_cash': None, 'buy_transfer': None, 'sell': None}
 
         # D. VietinBank (from history cache or current API)
         vietinbank_usd = existing_records.get((date_dd, 'VietinBank'))
-        if not vietinbank_usd or (vietinbank_usd.get('buy_transfer') is None and vietinbank_usd.get('sell') is None):
+        if not is_valid_rate_dict(vietinbank_usd):
             vietinbank_usd = get_vietinbank_usd_for_date(date_yyyy)
-        if not vietinbank_usd and is_today:
+        if not is_valid_rate_dict(vietinbank_usd) and is_today:
             vietinbank_usd = fetch_vietinbank_usd_current(date_yyyy)
-        if not vietinbank_usd:
+        if not is_valid_rate_dict(vietinbank_usd):
             vietinbank_usd = {'buy_cash': None, 'buy_transfer': None, 'sell': None}
 
         # E. SeaBank (historical API)
         seabank_usd = existing_records.get((date_dd, 'SeaBank'))
-        if not seabank_usd or (seabank_usd.get('buy_transfer') is None and seabank_usd.get('sell') is None):
+        if not is_valid_rate_dict(seabank_usd):
             seabank_usd = get_seabank_usd_for_date(date_dd)
-        if not seabank_usd:
+        if not is_valid_rate_dict(seabank_usd):
             seabank_usd = {'buy_cash': None, 'buy_transfer': None, 'sell': None}
 
         # F. Techcombank (historical API)
         techcom_usd = existing_records.get((date_dd, 'Techcombank'))
-        if not techcom_usd or (techcom_usd.get('buy_transfer') is None and techcom_usd.get('sell') is None):
+        if not is_valid_rate_dict(techcom_usd):
             techcom_usd = fetch_techcombank_usd_historical(date_yyyy)
-        if not techcom_usd and is_today and techcom_today:
+        if not is_valid_rate_dict(techcom_usd) and is_today and techcom_today:
             techcom_usd = techcom_today
-        if not techcom_usd:
+        if not is_valid_rate_dict(techcom_usd):
             techcom_usd = {'buy_cash': None, 'buy_transfer': None, 'sell': None}
 
         rows = []
