@@ -498,7 +498,7 @@
         }
 
         // Initialize App
-        document.addEventListener('DOMContentLoaded', () => {
+        function initApp() {
             initTheme();
 
             const dateList = Object.keys(RATES_HISTORY).sort().reverse();
@@ -510,6 +510,9 @@
             // Populate Dropdowns
             const selDate = document.getElementById('selectDate');
             const selCompare = document.getElementById('selectCompareDate');
+
+            selDate.innerHTML = '';
+            selCompare.innerHTML = '';
 
             dateList.forEach((iso, idx) => {
                 const dd = RATES_HISTORY[iso].date_dd;
@@ -546,7 +549,13 @@
 
             renderLineTrendChart();
             updateView();
-        });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            initApp();
+        }
 
         function setLatestDate() {
             const dateList = Object.keys(RATES_HISTORY).sort().reverse();
@@ -1034,12 +1043,11 @@
                 }
             });
 
-            const csvContent = "data:text/csv;charset=utf-8,﻿" + rows.map(e => e.join(",")).join("
-");
-            const encodedUri = encodeURI(csvContent);
+            const csvRows = rows.map(e => e.join(","));
+            const csvContent = "data:text/csv;charset=utf-8,%EF%BB%BF" + encodeURIComponent(csvRows.join(String.fromCharCode(10)));
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `TyGia_15_NganHang_${dayCurrent.date_dd.replace(/\//g, '-')}.csv`);
+            link.setAttribute("href", csvContent);
+            link.setAttribute("download", "TyGia_15_NganHang_" + dayCurrent.date_dd.split("/").join("-") + ".csv");
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
