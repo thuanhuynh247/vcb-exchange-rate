@@ -13,16 +13,19 @@ Tự động hóa hoàn toàn lịch trình chạy hằng ngày (**23h00**) qua 
 - **Dữ Liệu Lịch Sử Toàn Diện 2026 (01/01/2026 - 09/09/2026)**:
   - Lưu trữ đầy đủ **252 ngày giao dịch liên tục** cho toàn bộ 15 ngân hàng ($252 \times 15 = 3,780$ bản ghi tỷ giá chuẩn mực).
   - Không có ngày khuyết thiếu, áp dụng chuẩn ngoại suy tài chính (forward/backward fill ngày nghỉ/lễ) đồng bộ với biến động thị trường.
-- **Web Dashboard & GitHub Pages Tương Tác Cực Đẹp (`index.html` & `docs/index.html`)**:
-  - Giao diện Tailwind CSS sang trọng chuẩn Executive Financial Dashboard.
-  - **Date Picker 252 Ngày**: Cho phép chọn xem tỷ giá thị trường của bất kỳ ngày nào trong năm 2026.
-  - **So Sánh Tỷ Giá Giữa 2 Ngày**: Tự động tính chênh lệch tăng/giảm tuyệt đối (VND) và % biến động.
-  - **4 Thẻ Executive KPI Cards**: Cập nhật động theo ngày chọn (Giá Bán Thấp Nhất, Mua Tiền Mặt Cao Nhất, Mua CK Cao Nhất, Spread Thị Trường).
-  - **Bộ Lọc Đa Dạng**: Lọc theo nhóm (Tất cả, Big 4, TMCP), tìm kiếm tức thì theo tên ngân hàng, click sắp xếp theo cột.
-  - **2 Biểu Đồ Trực Quan (Chart.js)**:
-    - Biểu đồ cột Flat UI (Mua TM: Xanh ngọc, Mua CK: Xanh dương, Bán: Đỏ san hô).
-    - Biểu đồ đường toàn cảnh (Line Trend Chart) phản ánh xu hướng tỷ giá USD toàn năm 2026 của các ngân hàng tiêu biểu.
-  - Tải trực tiếp file Excel `TyGia_Banking.xlsx` và file JSON API `rates_history.json`.
+- **Nâng Cấp Toàn Diện UI/UX Pro Max Live Dashboard (`index.html` & `docs/index.html`)**:
+  - **Bento Grid & Glassmorphism**: Thiết kế giao diện hiện đại theo chuẩn Fintech Dashboard.
+  - **Chế Độ Sáng / Tối (Dark & Light Mode)**: Chuyển đổi mượt mà với bộ lưu cấu hình `localStorage`.
+  - **100% SVG Icons Chuẩn Mực**: Thay thế toàn bộ emoji icon bằng vector SVG sắc nét (Heroicons / Lucide).
+  - **Bộ Quy Đổi Ngoại Tệ Trực Tiếp (Interactive Currency Converter)**: Nhập số tiền USD để tính toán số tiền VND nhận được hoặc phải thanh toán ngay tức thì tại 15 ngân hàng, tự động đề xuất ngân hàng có lợi nhất.
+  - **Bảng So Sánh Matrix Pro Max**: Sắp xếp đa cột (Click tiêu đề cột để sort), huy hiệu Top 1/2/3 (Vàng, Bạc, Đồng), tìm kiếm ngân hàng trực tiếp theo thời gian thực, dòng `TRUNG BÌNH THỊ TRƯỜNG`.
+  - **Bộ Biểu Đồ Kép (Dual Chart.js Suite)**:
+    - Biểu đồ cột Flat UI 3 mức giá (Mua TM: Xanh ngọc, Mua CK: Xanh dương, Bán: Đỏ san hô).
+    - Biểu đồ đường toàn cảnh 2026 (252 ngày) với bộ chọn thời gian linh hoạt (7N, 1T, 3T, 252N).
+  - **Data Export Suite**: Nút xuất file CSV, nút tải file Excel `TyGia_Banking.xlsx`, nút tải API JSON `rates_history.json`, và in ấn / xuất PDF tối ưu layout.
+- **Hỗ Trợ Phân Tích Chuyên Sâu Với Extension `vscode-smart-data-viewer`**:
+  - Đã tích hợp sẵn gói extension `vnstock/vscode-smart-data-viewer` (v0.6.0) trong thư mục `tools/` và cài đặt tự động vào IDE.
+  - Cho phép mở trực tiếp các file `TyGia_Banking.xlsx`, `rates_history.json`, và file CSV để chạy truy vấn DuckDB SQL, phân tích EDA và biểu đồ chuyên sâu ngay trong trình soạn thảo mã nguồn.
 - **Crawl Dữ Liệu 15 Ngân Hàng (Pure Python - Không Dùng Playwright)**:
   - Tải **toàn bộ 20+ ngoại tệ** từ XML API của Vietcombank.
   - Tải tỷ giá **USD/VND** của **BIDV** (JSON API), **Techcombank** (JSON Integration API), **ACB** (REST API), **Agribank** (Cổng thông tin & WCM API), **VietABank** (Cổng niêm yết chính thức), **PVcomBank** (API JSON chính thức `Date=YYYY-MM-DD`).
