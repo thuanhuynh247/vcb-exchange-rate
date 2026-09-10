@@ -21,7 +21,7 @@ Tự động lấy tỷ giá **tất cả ngoại tệ** từ Vietcombank và t�
   - **BIDV**: JSON API (`ExchangeDetailServlet`).
   - **Techcombank**: Integration JSON API.
   - **ACB**: REST API (`effectiveDateTime` filter).
-  - **VietinBank & SeaBank**: Dùng Playwright/Chromium để crawl dữ liệu Real-time an toàn, bỏ qua các vấn đề chặn CORS/Cloudflare.
+  - **VietinBank & SeaBank**: Request HTTPS trực tiếp tới Server Action API (`next-action`) của từng trang, KHÔNG dùng Playwright/Chromium — toàn bộ 6 ngân hàng đều lấy bằng pure Python (`requests`), nhẹ và nhanh.
 - Ghi dữ liệu USD cộng dồn ẩn vào sheet **Data_TheoDoi_USD**.
 - Tạo sheet **TheoDoi_USD** nâng cao:
   - **Date Picker** (B4): dropdown chọn ngày xem tỷ giá.
@@ -32,11 +32,19 @@ Tự động lấy tỷ giá **tất cả ngoại tệ** từ Vietcombank và t�
   - Tự động đóng Excel (`taskkill`) nếu file đang bị mở (tránh khóa file khi ghi).
   - Tự động kiểm tra dung lượng trống ổ D, nếu `< 500MB` tiến hành dọn dẹp thư mục Temp và các bản backup cũ để giải phóng không gian.
   - Tự khôi phục từ bản backup gần nhất nếu file chính bị lỗi hoặc 0 bytes.
+  - **Tự dò & tải bổ sung ngày bị thiếu (trong 30 ngày gần nhất, mỗi lần chạy)**, phòng trường hợp máy tắt hoặc Task Scheduler bị bỏ lỡ 1 ngày:
+    - `fetch_missing_historical_rates()`: bù các ngày thiếu của **Vietcombank** (sheet `Data`, tất cả ngoại tệ) qua API JSON của VCB.
+    - `fetch_missing_multibank_rates()`: bù các ngày thiếu của **VietinBank, BIDV, Techcombank, ACB, SeaBank** (sheet `Data_TheoDoi_USD`) bằng API lịch sử riêng của từng ngân hàng.
 
-## Script lịch sử: `scripts/fetch_historical.py`
+## Script lịch sử (VCB - tất cả ngoại tệ): `scripts/fetch_historical.py`
 - Chạy thủ công khi cần lấy dữ liệu lịch sử từ 2025-01-01.
 - Sử dụng JSON API của VCB, hỗ trợ đa luồng (10 workers).
 - Tự phát hiện dữ liệu cũ và chỉ lấy ngày còn thiếu.
+
+## Script lịch sử đa ngân hàng (USD - 6 ngân hàng): `scripts/fetch_historical_all_banks.py`
+- Chạy thủ công để backfill tỷ giá **USD** của cả 6 ngân hàng từ 2026-01-01 đến hiện tại vào sheet `Data_TheoDoi_USD`.
+- Dùng song song `ThreadPoolExecutor` (5 workers), cache riêng lịch sử VietinBank (2 request cho toàn bộ khoảng thời gian) để giảm số lượng gọi API.
+- Tự bỏ qua ngày/ngân hàng đã có dữ liệu hợp lệ, chỉ gọi API cho phần còn thiếu.
 
 ## Export PDF: `scripts/export_pdf.py`
 - Xuất báo cáo tỷ giá dạng PDF với branding VCB.

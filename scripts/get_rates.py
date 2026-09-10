@@ -208,9 +208,9 @@ def fetch_acb_usd():
         logger.error(f"Lỗi lấy tỷ giá ACB: {e}")
     return {"bank": "ACB", "buy_cash": None, "buy_transfer": None, "sell": None}
 
-def fetch_vietinbank_usd():
-    """Fetch VietinBank current USD rate via Server Action API (no Playwright needed)."""
-    logger.info("Đang lấy tỷ giá VietinBank qua Server Action API...")
+def fetch_vietinbank_usd(target_time="17:15:00"):
+    """Fetch VietinBank USD rate prioritizing target_time (default 17:15:00), with fallbacks for earlier frames."""
+    logger.info(f"Đang lấy tỷ giá VietinBank qua Server Action API (ưu tiên khung giờ {target_time})...")
     url = "https://www.vietinbank.vn/ty-gia-khcn"
     action = "1e43a43a5124d6cc3cb463bc54021b34f39a4065"
     h = {
@@ -221,22 +221,29 @@ def fetch_vietinbank_usd():
         "referer": "https://www.vietinbank.vn/ty-gia-khcn"
     }
     date_str = datetime.now().strftime('%Y-%m-%d')
-    try:
-        r = requests.post(url, headers=h, data=json.dumps([f"{date_str}T15:45:00", "USD"]),
-                         verify=False, timeout=15)
-        for line in r.text.strip().split('\n'):
-            if line.startswith("1:"):
-                data = json.loads(line[2:])
-                if data and isinstance(data, list) and len(data) > 0:
-                    item = data[0]
-                    return {
-                        "bank": "VietinBank",
-                        "buy_cash": item.get('cash_rate_big'),
-                        "buy_transfer": item.get('transfer_rate'),
-                        "sell": item.get('sell_rate')
-                    }
-    except Exception as e:
-        logger.error(f"Lỗi VietinBank Server Action: {e}")
+    candidate_times = [target_time, "18:30:00", "18:00:00", "17:30:00", "17:15:00", "17:00:00", "16:30:00", "15:45:00", "14:00:00", "11:30:00", "09:00:00"]
+    seen = set()
+    times_to_try = [t for t in candidate_times if not (t in seen or seen.add(t))]
+
+    for t_str in times_to_try:
+        try:
+            r = requests.post(url, headers=h, data=json.dumps([f"{date_str}T{t_str}", "USD"]),
+                             verify=False, timeout=10)
+            for line in r.text.strip().split('\n'):
+                if line.startswith("1:"):
+                    data = json.loads(line[2:])
+                    if data and isinstance(data, list) and len(data) > 0:
+                        item = data[0]
+                        if item.get('transfer_rate') or item.get('sell_rate') or item.get('cash_rate_big'):
+                            logger.info(f"  ✅ Lấy thành công tỷ giá VietinBank khung giờ {t_str}")
+                            return {
+                                "bank": "VietinBank",
+                                "buy_cash": clean_rate_val(item.get('cash_rate_big')),
+                                "buy_transfer": clean_rate_val(item.get('transfer_rate')),
+                                "sell": clean_rate_val(item.get('sell_rate'))
+                            }
+        except Exception as e:
+            continue
         
     # Fallback to history Server Action API
     logger.info("Thử lấy tỷ giá VietinBank qua Server Action Lịch Sử...")
@@ -266,9 +273,9 @@ def fetch_vietinbank_usd():
         if transfer_val or sell_val:
             return {
                 "bank": "VietinBank",
-                "buy_cash": transfer_val,
-                "buy_transfer": transfer_val,
-                "sell": sell_val
+                "buy_cash": clean_rate_val(transfer_val),
+                "buy_transfer": clean_rate_val(transfer_val),
+                "sell": clean_rate_val(sell_val)
             }
     except Exception as e:
         logger.error(f"Lỗi VietinBank Server Action Lịch Sử: {e}")
@@ -312,6 +319,423 @@ def fetch_seabank_usd():
         logger.error(f"Lỗi SeaBank Server Action: {e}")
     return {"bank": "SeaBank", "buy_cash": None, "buy_transfer": None, "sell": None}
 
+
+def fetch_agribank_usd():
+    """Fetch Agribank current USD exchange rate directly from portal table."""
+    logger.info("Đang lấy tỷ giá Agribank...")
+    url = "https://www.agribank.com.vn/vn/ty-gia"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=15, verify=False)
+        if r.status_code == 200:
+            tables = re.findall(r'<table[^>]*>(.*?)</table>', r.text, re.DOTALL | re.IGNORECASE)
+            for t in tables:
+                for row in re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.DOTALL | re.IGNORECASE):
+                    if 'USD' in row:
+                        cells = re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>', row, re.DOTALL | re.IGNORECASE)
+                        clean = [' '.join(re.sub(r'<[^>]+>', ' ', c).split()) for c in cells]
+                        if len(clean) >= 4:
+                            return {
+                                "bank": "Agribank",
+                                "buy_cash": clean_rate_val(clean[1]),
+                                "buy_transfer": clean_rate_val(clean[2]),
+                                "sell": clean_rate_val(clean[3])
+                            }
+    except Exception as e:
+        logger.error(f"Lỗi lấy tỷ giá Agribank: {e}")
+    return {"bank": "Agribank", "buy_cash": None, "buy_transfer": None, "sell": None}
+
+
+def fetch_vietabank_usd():
+    """Fetch VietABank current USD exchange rate from official table ($50-$100 denomination)."""
+    logger.info("Đang lấy tỷ giá VietABank...")
+    url = "https://vietabank.com.vn/ty-gia-ngoai-te.html"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=15, verify=False)
+        if r.status_code == 200:
+            tables = re.findall(r'<table[^>]*>(.*?)</table>', r.text, re.DOTALL | re.IGNORECASE)
+            for t in tables:
+                for row in re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.DOTALL | re.IGNORECASE):
+                    if 'USD' in row and ('50' in row or '100' in row):
+                        cells = re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>', row, re.DOTALL | re.IGNORECASE)
+                        clean = [' '.join(re.sub(r'<[^>]+>', ' ', c).split()) for c in cells]
+                        if len(clean) >= 5:
+                            sell_val = clean[5] if len(clean) > 5 and clean[5] else clean[4]
+                            return {
+                                "bank": "VietABank",
+                                "buy_cash": clean_rate_val(clean[2]),
+                                "buy_transfer": clean_rate_val(clean[3]),
+                                "sell": clean_rate_val(sell_val)
+                            }
+    except Exception as e:
+        logger.error(f"Lỗi lấy tỷ giá VietABank: {e}")
+    return {"bank": "VietABank", "buy_cash": None, "buy_transfer": None, "sell": None}
+
+
+def fetch_pvcombank_usd(date_str_yyyy_mm_dd=None):
+    """Fetch PVcomBank USD rate via official JSON endpoint ($50, $100 denomination)."""
+    logger.info("Đang lấy tỷ giá PVcomBank...")
+    if not date_str_yyyy_mm_dd:
+        date_str_yyyy_mm_dd = datetime.now().strftime('%Y-%m-%d')
+    url = f'https://www.pvcombank.com.vn/exchange-rate-by-date?Date={date_str_yyyy_mm_dd}'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36'
+    }
+    try:
+        r = requests.get(url, headers=headers, verify=False, timeout=25)
+        if r.status_code == 200:
+            data = r.json()
+            for item in data.get('response', []):
+                if item.get('currencyCode') == 'USD':
+                    for res in item.get('exRateResList', []):
+                        for ch in res.get('exRateListedChannelResList', []):
+                            cash_info = ch.get('exRateBuyCashRes', {})
+                            if '50$' in cash_info.get('moneyName', ''):
+                                return {
+                                    'bank': 'PVcomBank',
+                                    'buy_cash': clean_rate_val(cash_info.get('exRate')),
+                                    'buy_transfer': clean_rate_val(ch.get('exRateBuyTransferRes', {}).get('exRate')),
+                                    'sell': clean_rate_val(ch.get('exRateSellRes', {}).get('exRate')),
+                                }
+    except Exception as e:
+        logger.error(f"Lỗi lấy tỷ giá PVcomBank: {e}")
+    return {'bank': 'PVcomBank', 'buy_cash': None, 'buy_transfer': None, 'sell': None}
+
+
+def fetch_vpbank_usd():
+    """Fetch VPBank USD rate via high-fidelity aggregator portal."""
+    logger.info("Đang lấy tỷ giá VPBank...")
+    url = 'https://ngan-hang.com/vpbank/'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36'
+    }
+    try:
+        r = requests.get(url, headers=headers, verify=False, timeout=15)
+        if r.status_code == 200:
+            tables = re.findall(r'<table[^>]*>(.*?)</table>', r.text, re.DOTALL | re.IGNORECASE)
+            for t in tables:
+                for row in re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.DOTALL | re.IGNORECASE):
+                    if 'USD' in row:
+                        cells = re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>', row, re.DOTALL | re.IGNORECASE)
+                        clean = [' '.join(re.sub(r'<[^>]+>', ' ', c).split()) for c in cells]
+                        if len(clean) >= 3:
+                            buy_val = clean_rate_val(clean[1])
+                            sell_val = clean_rate_val(clean[2])
+                            return {
+                                'bank': 'VPBank',
+                                'buy_cash': buy_val,
+                                'buy_transfer': buy_val,
+                                'sell': sell_val,
+                            }
+    except Exception as e:
+        logger.error(f"Lỗi lấy tỷ giá VPBank: {e}")
+    return {'bank': 'VPBank', 'buy_cash': None, 'buy_transfer': None, 'sell': None}
+
+
+def fetch_webgia_bank_rate(bank_slug, display_name):
+    """Trích xuất tỷ giá USD của ngân hàng từ cổng dữ liệu webgia."""
+    url = f"https://webgia.com/ty-gia/{bank_slug}/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36'
+    }
+    try:
+        r = requests.get(url, headers=headers, verify=False, timeout=10)
+        if r.status_code == 200:
+            for row in re.findall(r'<tr[^>]*>(.*?)</tr>', r.text, re.DOTALL | re.IGNORECASE):
+                if 'USD' in row:
+                    cells = re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>', row, re.DOTALL | re.IGNORECASE)
+                    clean = [' '.join(re.sub(r'<[^>]+>', ' ', c).split()) for c in cells]
+                    rates = []
+                    # Bỏ qua cell đầu tiên (Mã ngoại tệ / mệnh giá) để tránh dính số 50,100
+                    for c in clean[1:]:
+                        val_str = str(c).strip().replace(",", "").replace(".", "")
+                        val_str = re.sub(r"[#&\s\+]", "", val_str)
+                        try:
+                            num = float(val_str)
+                            if num < 1000:
+                                num = num * 1000
+                            if 20000 <= num <= 30000:
+                                rates.append(round(num, 2))
+                        except:
+                            continue
+                    if len(rates) >= 3:
+                        return {
+                            'bank': display_name,
+                            'buy_cash': rates[0],
+                            'buy_transfer': rates[1],
+                            'sell': rates[2],
+                        }
+                    elif len(rates) == 2:
+                        return {
+                            'bank': display_name,
+                            'buy_cash': rates[0],
+                            'buy_transfer': rates[0],
+                            'sell': rates[1],
+                        }
+    except Exception as e:
+        logger.error(f"Lỗi lấy tỷ giá {display_name}: {e}")
+    return {'bank': display_name, 'buy_cash': None, 'buy_transfer': None, 'sell': None}
+
+
+def fetch_sacombank_usd():
+    """Fetch Sacombank USD rate."""
+    logger.info("Đang lấy tỷ giá Sacombank...")
+    return fetch_webgia_bank_rate("sacombank", "Sacombank")
+
+
+def fetch_tpbank_usd():
+    """Fetch TPBank USD rate."""
+    logger.info("Đang lấy tỷ giá TPBank...")
+    return fetch_webgia_bank_rate("tpbank", "TPBank")
+
+
+def fetch_eximbank_usd():
+    """Fetch Eximbank USD rate."""
+    logger.info("Đang lấy tỷ giá Eximbank...")
+    return fetch_webgia_bank_rate("eximbank", "Eximbank")
+
+
+def fetch_hdbank_usd():
+    """Fetch HDBank USD rate."""
+    logger.info("Đang lấy tỷ giá HDBank...")
+    return fetch_webgia_bank_rate("hdbank", "HDBank")
+
+
+def fetch_ocb_usd():
+    """Fetch OCB USD rate."""
+    logger.info("Đang lấy tỷ giá OCB...")
+    return fetch_webgia_bank_rate("ocb", "OCB")
+
+
+
+
+# =======================================================================
+# TỰ ĐỘNG DÒ & TẢI BỔ SUNG TỶ GIÁ ĐA NGÂN HÀNG CHO NGÀY BỊ THIẾU
+# (VCB đã tự phục hồi qua fetch_missing_historical_rates; các ngân hàng còn
+#  lại KHÔNG có cơ chế phục hồi lịch sử, dẫn tới lỗ hổng khi Task Scheduler
+#  bị bỏ lỡ 1 ngày chạy. Các hàm dưới đây bù đắp phần đó bằng API lịch sử
+#  của từng ngân hàng, chỉ dùng khi cần tải bổ sung ngày cũ.)
+# =======================================================================
+
+def _fetch_bidv_history_for_date(date_str_dd_mm_yyyy):
+    url = f"https://bidv.com.vn/ServicesBIDV/ExchangeDetailServlet?date={date_str_dd_mm_yyyy}"
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, timeout=15, verify=False)
+        if r.status_code == 200:
+            data = r.json()
+            for item in data.get("data", []):
+                if item.get("currency") == "USD":
+                    return {
+                        "buy_cash": clean_rate_val(item.get("muaTm")),
+                        "buy_transfer": clean_rate_val(item.get("muaCk")),
+                        "sell": clean_rate_val(item.get("ban"))
+                    }
+    except Exception as e:
+        logger.warning(f"  ⚠ Lỗi tải lịch sử BIDV ngày {date_str_dd_mm_yyyy}: {e}")
+    return None
+
+
+def _fetch_acb_history_for_date(date_str_yyyy_mm_dd):
+    url = f"https://acb.com.vn/api/front/v1/currency?currency=VND&effectiveDateTime={date_str_yyyy_mm_dd}T14:00:00.000"
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, timeout=15, verify=False)
+        if r.status_code == 200:
+            data = r.json()
+            buy_cash = buy_transfer = sell = None
+            for item in data:
+                if item.get("exchangeCurrency") == "USD":
+                    deal_type = item.get("dealType")
+                    inst_type = item.get("instrumentType")
+                    rate = clean_rate_val(item.get("exchangeRate"))
+                    if deal_type == "BID" and inst_type == "CASH":
+                        buy_cash = rate
+                    elif deal_type == "BID" and inst_type == "TRANSFER":
+                        buy_transfer = rate
+                    elif deal_type == "ASK":
+                        sell = rate
+            if buy_cash or buy_transfer or sell:
+                return {"buy_cash": buy_cash, "buy_transfer": buy_transfer, "sell": sell}
+    except Exception as e:
+        logger.warning(f"  ⚠ Lỗi tải lịch sử ACB ngày {date_str_yyyy_mm_dd}: {e}")
+    return None
+
+
+def _fetch_techcombank_history_for_date(date_str_yyyy_mm_dd):
+    url = f"https://techcombank.com/content/techcombank/web/vn/vi/cong-cu-tien-ich/ty-gia/_jcr_content.exchange-rates.{date_str_yyyy_mm_dd}.integration.json"
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, verify=False, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            rates = data.get("exchangeRate", {}).get("data", [])
+            for item in rates:
+                if item.get("label", "").startswith("USD (50") or item.get("label") == "USD (50,100)":
+                    return {
+                        "buy_cash": clean_rate_val(item.get("bidRateTM")),
+                        "buy_transfer": clean_rate_val(item.get("bidRateCK")),
+                        "sell": clean_rate_val(item.get("askRate"))
+                    }
+    except Exception as e:
+        logger.warning(f"  ⚠ Lỗi tải lịch sử Techcombank ngày {date_str_yyyy_mm_dd}: {e}")
+    return None
+
+
+def _fetch_vietinbank_history_for_date(date_str_yyyy_mm_dd):
+    """Tải tỷ giá VietinBank cho 1 ngày cụ thể qua Server Action Lịch Sử (khoảng 1 ngày)."""
+    url = "https://www.vietinbank.vn/ty-gia-khcn"
+    action_history = "ff24b60505a8da357a655878afe7dd2d1f9f0e52"
+    h = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Content-Type": "text/plain;charset=UTF-8",
+        "next-action": action_history,
+        "accept": "text/x-component",
+        "referer": "https://www.vietinbank.vn/ty-gia-khcn"
+    }
+    try:
+        r_tf = requests.post(url, headers=h, data=json.dumps([date_str_yyyy_mm_dd, date_str_yyyy_mm_dd, "USD", "transfer_rate"]),
+                             verify=False, timeout=15)
+        transfer_val = None
+        for line in r_tf.text.strip().split('\n'):
+            if line.startswith("1:"):
+                data = json.loads(line[2:])
+                if data and isinstance(data, list) and len(data) > 0:
+                    transfer_val = data[0].get('close', data[0].get('open'))
+
+        r_sell = requests.post(url, headers=h, data=json.dumps([date_str_yyyy_mm_dd, date_str_yyyy_mm_dd, "USD", "sell_rate"]),
+                               verify=False, timeout=15)
+        sell_val = None
+        for line in r_sell.text.strip().split('\n'):
+            if line.startswith("1:"):
+                data = json.loads(line[2:])
+                if data and isinstance(data, list) and len(data) > 0:
+                    sell_val = data[0].get('close', data[0].get('open'))
+
+        if transfer_val or sell_val:
+            return {
+                "buy_cash": clean_rate_val(transfer_val),
+                "buy_transfer": clean_rate_val(transfer_val),
+                "sell": clean_rate_val(sell_val)
+            }
+    except Exception as e:
+        logger.warning(f"  ⚠ Lỗi tải lịch sử VietinBank ngày {date_str_yyyy_mm_dd}: {e}")
+    return None
+
+
+def _fetch_seabank_history_for_date(date_str_dd_mm_yyyy):
+    url = "https://www.seabank.com.vn/cong-cu-tien-ich/ty-gia"
+    action = "d65f2411081b93638167328d79ca76cf2bc7ec18"
+    h = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Content-Type": "text/plain;charset=UTF-8",
+        "next-action": action,
+        "accept": "text/x-component",
+        "referer": "https://www.seabank.com.vn/cong-cu-tien-ich/ty-gia"
+    }
+    try:
+        r = requests.post(url, headers=h, data=json.dumps([date_str_dd_mm_yyyy]), verify=False, timeout=15)
+        for line in r.text.strip().split('\n'):
+            if line.startswith("1:"):
+                data = json.loads(line[2:])
+                if data and isinstance(data, dict) and 'details' in data:
+                    usd = next((x for x in data['details'] if x.get('currency') == 'USD'), None)
+                    if usd:
+                        def to_f(v):
+                            try:
+                                return float(str(v).replace(',', '')) if v else None
+                            except:
+                                return None
+                        return {
+                            "buy_cash": to_f(usd.get('buy')),
+                            "buy_transfer": to_f(usd.get('transferBuy')),
+                            "sell": to_f(usd.get('sell'))
+                        }
+    except Exception as e:
+        logger.warning(f"  ⚠ Lỗi tải lịch sử SeaBank ngày {date_str_dd_mm_yyyy}: {e}")
+    return None
+
+
+def _fetch_agribank_history_for_date(date_str_dd_mm_yyyy):
+    """Tải tỷ giá Agribank cho 1 ngày cụ thể qua API WCM."""
+    d_clean = date_str_dd_mm_yyyy.replace('/', '-')
+    parts = d_clean.split('-')
+    if len(parts) == 3:
+        year = parts[2]
+        url = f"https://www.agribank.com.vn/wcm/connect/ttkhac/ty-gia/{year}/{d_clean}?source=library&srv=cmpnt&cmpntid=b42b798a-7057-49c3-b0fd-3766e30729cf"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
+        }
+        try:
+            r = requests.get(url, headers=headers, timeout=15, verify=False)
+            if r.status_code == 200:
+                for row in re.findall(r'<tr[^>]*>(.*?)</tr>', r.text, re.DOTALL | re.IGNORECASE):
+                    if 'USD' in row:
+                        cells = re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>', row, re.DOTALL | re.IGNORECASE)
+                        clean = [' '.join(re.sub(r'<[^>]+>', ' ', c).split()) for c in cells]
+                        if len(clean) >= 4:
+                            return {
+                                "buy_cash": clean_rate_val(clean[1]),
+                                "buy_transfer": clean_rate_val(clean[2]),
+                                "sell": clean_rate_val(clean[3])
+                            }
+        except Exception as e:
+            logger.warning(f"  ⚠ Lỗi tải lịch sử Agribank ngày {date_str_dd_mm_yyyy}: {e}")
+    return None
+
+
+def fetch_missing_multibank_rates(existing_rows, max_days_back=30):
+    """Tự động dò và tải bổ sung tỷ giá USD của VietinBank/BIDV/Agribank/Techcombank/ACB/SeaBank
+    cho các ngày gần đây bị thiếu trong Data_TheoDoi_USD (ví dụ do máy tắt hoặc
+    Task Scheduler bị bỏ lỡ). Vietcombank đã có cơ chế riêng (fetch_missing_historical_rates)."""
+    existing_pairs = set()
+    for r in existing_rows:
+        date_str, bank_str = str(r[0]).strip(), str(r[1]).strip()
+        buy_cash, buy_transfer, sell = r[2], r[3], r[4]
+        if buy_cash or buy_transfer or sell:
+            existing_pairs.add((date_str, bank_str))
+
+    banks_fetchers = {
+        "VietinBank": lambda dd, yyyy: _fetch_vietinbank_history_for_date(yyyy),
+        "BIDV": lambda dd, yyyy: _fetch_bidv_history_for_date(dd),
+        "Agribank": lambda dd, yyyy: _fetch_agribank_history_for_date(dd),
+        "Techcombank": lambda dd, yyyy: _fetch_techcombank_history_for_date(yyyy),
+        "ACB": lambda dd, yyyy: _fetch_acb_history_for_date(yyyy),
+        "SeaBank": lambda dd, yyyy: _fetch_seabank_history_for_date(dd),
+        "PVcomBank": lambda dd, yyyy: fetch_pvcombank_usd(yyyy),
+    }
+
+    today = datetime.now()
+    missing_records = []
+    for i in range(1, max_days_back + 1):
+        dt = today - timedelta(days=i)
+        date_dd = dt.strftime('%d/%m/%Y')
+        date_yyyy = dt.strftime('%Y-%m-%d')
+        for bank, fetcher in banks_fetchers.items():
+            if bank == "PVcomBank" and i > 5:
+                continue
+            if (date_dd, bank) in existing_pairs:
+                continue
+            try:
+                rate = fetcher(date_dd, date_yyyy)
+            except Exception as e:
+                logger.warning(f"  ⚠ Lỗi tải bổ sung {bank} ngày {date_dd}: {e}")
+                rate = None
+            if rate and (rate.get('buy_transfer') or rate.get('sell') or rate.get('buy_cash')):
+                missing_records.append({
+                    "bank": bank, "_date": date_dd,
+                    "buy_cash": rate.get('buy_cash'),
+                    "buy_transfer": rate.get('buy_transfer'),
+                    "sell": rate.get('sell'),
+                })
+
+    if missing_records:
+        logger.info(f"🔍 Đã tải bổ sung {len(missing_records)} bản ghi tỷ giá đa ngân hàng còn thiếu trong {max_days_back} ngày gần đây.")
+    return missing_records
+
+
 def get_multi_bank_rates(vcb_usd_data=None):
     logger.info("=== BẮT ĐẦU THU THẬP TỶ GIÁ USD CÁC NGÂN HÀNG ===")
     
@@ -334,12 +758,21 @@ def get_multi_bank_rates(vcb_usd_data=None):
             logger.error(f"Lỗi lấy VCB USD: {e}")
             
     bidv = fetch_bidv_usd()
+    agri = fetch_agribank_usd()
     tcb = fetch_techcombank_usd()
     acb = fetch_acb_usd()
     vtb = fetch_vietinbank_usd()
     seab = fetch_seabank_usd()
+    vab = fetch_vietabank_usd()
+    pvcb = fetch_pvcombank_usd()
+    vpb = fetch_vpbank_usd()
+    sacom = fetch_sacombank_usd()
+    tpb = fetch_tpbank_usd()
+    exim = fetch_eximbank_usd()
+    hdb = fetch_hdbank_usd()
+    ocb = fetch_ocb_usd()
         
-    res_list = [vcb_res, vtb, bidv, tcb, acb, seab]
+    res_list = [vcb_res, vtb, bidv, agri, tcb, acb, sacom, tpb, vpb, hdb, exim, ocb, seab, vab, pvcb]
     logger.info(f"Kết quả thu thập: {res_list}")
     return res_list
 
@@ -362,8 +795,7 @@ def _save_multi_bank_data(wb, multi_bank_data, current_date_str):
             if date_val and bank_val:
                 existing_rows.append([str(date_val).strip(), str(bank_val).strip(), buy_cash, buy_transfer, sell])
                 
-    if not existing_rows and 'Data' in wb.sheetnames:
-        logger.info("Bắt đầu di trú lịch sử tỷ giá USD của Vietcombank sang Data_TheoDoi_USD...")
+    if 'Data' in wb.sheetnames:
         ws_vcb = wb['Data']
         vcb_rows = []
         for r in range(2, ws_vcb.max_row + 1):
@@ -376,18 +808,26 @@ def _save_multi_bank_data(wb, multi_bank_data, current_date_str):
                     date_str = date_val.strftime('%d/%m/%Y')
                 else:
                     try:
-                        dt = pd.to_datetime(date_val)
+                        dt = pd.to_datetime(date_val, dayfirst=True, format='mixed')
                         date_str = dt.strftime('%d/%m/%Y')
                     except:
                         date_str = str(date_val)[:10]
+                        parts = date_str.split('-')
+                        if len(parts) == 3:
+                            date_str = f"{parts[2]}/{parts[1]}/{parts[0]}"
                 
                 buy_cash = ws_vcb.cell(r, 4).value
                 buy_transfer = ws_vcb.cell(r, 5).value
                 sell = ws_vcb.cell(r, 6).value
-                vcb_rows.append([date_str, 'Vietcombank', buy_cash, buy_transfer, sell])
+                if buy_cash or buy_transfer or sell:
+                    vcb_rows.append([date_str, 'Vietcombank', buy_cash, buy_transfer, sell])
         existing_rows.extend(vcb_rows)
-        logger.info(f"Đã di trú {len(vcb_rows)} dòng lịch sử VCB.")
-        
+        logger.info(f"Đã đồng bộ {len(vcb_rows)} dòng lịch sử VCB từ sheet Data.")
+
+    missing_multibank = fetch_missing_multibank_rates(existing_rows)
+    for rec in missing_multibank:
+        existing_rows.append([rec['_date'], rec['bank'], rec['buy_cash'], rec['buy_transfer'], rec['sell']])
+
     today_str = datetime.now().strftime('%d/%m/%Y')
     for item in multi_bank_data:
         if item['bank'] == 'Vietcombank':
@@ -443,68 +883,97 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
         
     ws.sheet_view.showGridLines = False
     
-    THEME_GREEN = '00703C'
-    THEME_GREEN_LIGHT = 'E8F5E9'
-    THEME_WHITE = 'FFFFFF'
-    THEME_DARK = '333333'
-    THEME_GRAY = '666666'
-    THEME_BLUE = '1565C0'
-    THEME_BLUE_LIGHT = 'E3F2FD'
+    # ── Modern Financial Palette ──
+    SLATE_900 = '0F172A'
+    SLATE_800 = '1E293B'
+    SLATE_600 = '475569'
+    SLATE_500 = '64748B'
+    SLATE_200 = 'E2E8F0'
+    SLATE_100 = 'F1F5F9'
+    SLATE_50  = 'F8FAFC'
     
-    font_title = Font(bold=True, size=18, color=THEME_DARK, name='Arial')
-    font_header = Font(bold=True, color=THEME_WHITE, size=11, name='Arial')
-    font_body = Font(size=11, name='Arial')
-    font_bold = Font(bold=True, size=11, name='Arial')
+    EMERALD_700 = '047857'
+    EMERALD_100 = 'D1FAE5'
+    EMERALD_BORDER = 'A7F3D0'
     
-    fill_header_green = PatternFill(start_color=THEME_GREEN, end_color=THEME_GREEN, fill_type='solid')
-    fill_header_blue = PatternFill(start_color=THEME_BLUE, end_color=THEME_BLUE, fill_type='solid')
-    fill_even_row = PatternFill(start_color=THEME_GREEN_LIGHT, end_color=THEME_GREEN_LIGHT, fill_type='solid')
-    fill_compare_blue = PatternFill(start_color=THEME_BLUE_LIGHT, end_color=THEME_BLUE_LIGHT, fill_type='solid')
+    AMBER_700 = 'B45309'
+    AMBER_800 = '92400E'
+    AMBER_100 = 'FEF3C7'
+    AMBER_BORDER = 'FDE68A'
     
-    border_thin = Border(
-        left=Side(style='thin', color='C8E6C9'),
-        right=Side(style='thin', color='C8E6C9'),
-        top=Side(style='thin', color='C8E6C9'),
-        bottom=Side(style='thin', color='C8E6C9'),
+    BLUE_700 = '1D4ED8'
+    BLUE_800 = '1E40AF'
+    BLUE_100 = 'DBEAFE'
+    BLUE_BORDER = 'BFDBFE'
+    BLUE_50  = 'EFF6FF'
+    
+    WHITE = 'FFFFFF'
+    RED_ACCENT = 'DC2626'
+    GREEN_ACCENT = '16A34A'
+    
+    # Helper to style a block/range
+    def apply_box_style(ws, top_left, bottom_right, font=None, fill=None, border=None, alignment=None, num_format=None):
+        for row in ws[f"{top_left}:{bottom_right}"]:
+            for cell in row:
+                if font: cell.font = font
+                if fill: cell.fill = fill
+                if border: cell.border = border
+                if alignment: cell.alignment = alignment
+                if num_format: cell.number_format = num_format
+    
+    border_card = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1'),
     )
-    border_picker = Border(
-        left=Side(style='medium', color=THEME_GREEN),
-        right=Side(style='medium', color=THEME_GREEN),
-        top=Side(style='medium', color=THEME_GREEN),
-        bottom=Side(style='medium', color=THEME_GREEN),
+    border_grid = Border(
+        left=Side(style='thin', color='E2E8F0'),
+        right=Side(style='thin', color='E2E8F0'),
+        top=Side(style='thin', color='E2E8F0'),
+        bottom=Side(style='thin', color='E2E8F0'),
+    )
+    border_picker_green = Border(
+        left=Side(style='medium', color='10B981'),
+        right=Side(style='medium', color='10B981'),
+        top=Side(style='medium', color='10B981'),
+        bottom=Side(style='medium', color='10B981'),
     )
     border_picker_blue = Border(
-        left=Side(style='medium', color=THEME_BLUE),
-        right=Side(style='medium', color=THEME_BLUE),
-        top=Side(style='medium', color=THEME_BLUE),
-        bottom=Side(style='medium', color=THEME_BLUE),
+        left=Side(style='medium', color='2563EB'),
+        right=Side(style='medium', color='2563EB'),
+        top=Side(style='medium', color='2563EB'),
+        bottom=Side(style='medium', color='2563EB'),
     )
     
     col_widths = {
-        'A': 3, 'B': 22, 'C': 18, 'D': 20, 'E': 18, 'F': 22, 'G': 18, 'H': 18, 'I': 16, 'J': 3
+        'A': 3, 'B': 24, 'C': 18, 'D': 20, 'E': 18, 'F': 22, 'G': 18, 'H': 18, 'I': 16, 'J': 3
     }
     for col, w in col_widths.items():
         ws.column_dimensions[col].width = w
         
+    # ── HEADER & TITLE ──
     ws.merge_cells('B2:I2')
-    ws['B2'].value = 'BẢNG SO SÁNH TỶ GIÁ USD/VND GIỮA CÁC NGÂN HÀNG'
-    ws['B2'].font = font_title
+    ws['B2'].value = 'BẢNG ĐIỀU HÀNH TỶ GIÁ USD/VND (EXECUTIVE DASHBOARD)'
+    ws['B2'].font = Font(bold=True, size=16, color=SLATE_900, name='Arial')
     ws['B2'].alignment = Alignment(horizontal='left', vertical='center')
-    ws.row_dimensions[2].height = 40
+    ws.row_dimensions[2].height = 36
     
-    ws['B3'].value = 'Ngày xem'
-    ws['B3'].font = Font(size=10, color=THEME_GRAY, name='Arial')
-    ws['E3'].value = 'So sánh với ngày'
-    ws['E3'].font = Font(size=10, color=THEME_GRAY, name='Arial')
+    ws.merge_cells('B3:I3')
+    ws['B3'].value = 'Theo dõi, phân tích và so sánh biến động tỷ giá giữa 15 ngân hàng thương mại hàng đầu Việt Nam'
+    ws['B3'].font = Font(size=10, italic=True, color=SLATE_500, name='Arial')
+    ws['B3'].alignment = Alignment(horizontal='left', vertical='center')
+    ws.row_dimensions[3].height = 20
     
+    # ── CONTROLS BAR (Row 4) ──
     ws['B4'].value = current_date_str
-    ws['B4'].font = Font(size=13, color=THEME_DARK, name='Arial', bold=True)
+    ws['B4'].font = Font(size=12, color=SLATE_900, name='Arial', bold=True)
     ws['B4'].alignment = Alignment(horizontal='center', vertical='center')
-    ws['B4'].border = border_picker
-    ws['B4'].fill = PatternFill(start_color='F0FFF0', end_color='F0FFF0', fill_type='solid')
+    ws['B4'].border = border_picker_green
+    ws['B4'].fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
     
-    ws['C4'].value = '📅 Chọn ngày'
-    ws['C4'].font = Font(size=10, color=THEME_GRAY, italic=True, name='Arial')
+    ws['C4'].value = '📅 Ngày xem tỷ giá'
+    ws['C4'].font = Font(size=10, color=SLATE_500, italic=True, name='Arial')
     ws['C4'].alignment = Alignment(horizontal='left', vertical='center')
     
     ws_data = wb['Data_TheoDoi_USD']
@@ -513,7 +982,7 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
         for r in range(2, ws_data.max_row + 1):
             d = ws_data.cell(r, 1).value
             if d:
-                unique_dates.append(str(d))
+                unique_dates.append(str(d).strip())
     unique_dates = sorted(list(set(unique_dates)), key=lambda x: datetime.strptime(x, '%d/%m/%Y'), reverse=True)
     
     compare_date_str = current_date_str
@@ -521,16 +990,25 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
         compare_date_str = unique_dates[1] if unique_dates[0] == current_date_str else unique_dates[0]
         
     ws['E4'].value = compare_date_str
-    ws['E4'].font = Font(size=13, color=THEME_BLUE, name='Arial', bold=True)
+    ws['E4'].font = Font(size=12, color=BLUE_700, name='Arial', bold=True)
     ws['E4'].alignment = Alignment(horizontal='center', vertical='center')
     ws['E4'].border = border_picker_blue
-    ws['E4'].fill = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
+    ws['E4'].fill = PatternFill(start_color=BLUE_50, end_color=BLUE_50, fill_type='solid')
     
-    ws['F4'].value = '📅 So sánh'
-    ws['F4'].font = Font(size=10, color=THEME_GRAY, italic=True, name='Arial')
+    ws['F4'].value = '📅 So sánh với ngày'
+    ws['F4'].font = Font(size=10, color=SLATE_500, italic=True, name='Arial')
     ws['F4'].alignment = Alignment(horizontal='left', vertical='center')
+    
+    ws.merge_cells('H4:I4')
+    ws['H4'].value = '🏛️ Quy mô: 15 Ngân hàng'
+    ws['H4'].font = Font(size=10, bold=True, color=SLATE_600, name='Arial')
+    ws['H4'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['H4'].fill = PatternFill(start_color=SLATE_100, end_color=SLATE_100, fill_type='solid')
+    ws['H4'].border = border_card
+    ws['I4'].border = border_card
     ws.row_dimensions[4].height = 32
     
+    # Date Pickers Data Validation
     if unique_dates:
         for i, d_str in enumerate(unique_dates, 1):
             ws.cell(i, 27, d_str)
@@ -541,128 +1019,612 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
         ws.add_data_validation(dv)
         dv.add(ws['B4'])
         dv.add(ws['E4'])
-        
+
+    ws.row_dimensions[5].height = 10  # Spacer
+    
+    # ── 4 EXECUTIVE KPI CARDS (Rows 6 to 8) ──
+    # Card 1 (B6:C8): BÁN THẤP NHẤT (MUA USD TỐT NHẤT)
+    ws.merge_cells('B6:C6')
+    ws['B6'].value = '🏆 BÁN THẤP NHẤT (MUA TỐT)'
+    ws.merge_cells('B7:C7')
+    ws['B7'].value = '=MIN(E12:E26)'
+    ws.merge_cells('B8:C8')
+    ws['B8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B26, MATCH(MIN(E12:E26), E12:E26, 0)))'
+    
+    apply_box_style(ws, 'B6', 'C8', fill=PatternFill(start_color=AMBER_100, end_color=AMBER_100, fill_type='solid'),
+                    border=Border(left=Side(style='thin', color=AMBER_BORDER), right=Side(style='thin', color=AMBER_BORDER),
+                                  top=Side(style='thin', color=AMBER_BORDER), bottom=Side(style='thin', color=AMBER_BORDER)))
+    ws['B6'].font = Font(bold=True, size=9, color=AMBER_700, name='Arial')
+    ws['B6'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['B7'].font = Font(bold=True, size=16, color=AMBER_800, name='Arial')
+    ws['B7'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['B7'].number_format = '#,##0.00'
+    ws['B8'].font = Font(italic=True, size=9, color=AMBER_800, name='Arial')
+    ws['B8'].alignment = Alignment(horizontal='center', vertical='center')
+
+    # Card 2 (D6:E8): MUA TIỀN MẶT CAO NHẤT
+    ws.merge_cells('D6:E6')
+    ws['D6'].value = '💰 MUA TIỀN MẶT CAO NHẤT'
+    ws.merge_cells('D7:E7')
+    ws['D7'].value = '=MAX(C12:C26)'
+    ws.merge_cells('D8:E8')
+    ws['D8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B26, MATCH(MAX(C12:C26), C12:C26, 0)))'
+    
+    apply_box_style(ws, 'D6', 'E8', fill=PatternFill(start_color=EMERALD_100, end_color=EMERALD_100, fill_type='solid'),
+                    border=Border(left=Side(style='thin', color=EMERALD_BORDER), right=Side(style='thin', color=EMERALD_BORDER),
+                                  top=Side(style='thin', color=EMERALD_BORDER), bottom=Side(style='thin', color=EMERALD_BORDER)))
+    ws['D6'].font = Font(bold=True, size=9, color=EMERALD_700, name='Arial')
+    ws['D6'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['D7'].font = Font(bold=True, size=16, color=EMERALD_700, name='Arial')
+    ws['D7'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['D7'].number_format = '#,##0.00'
+    ws['D8'].font = Font(italic=True, size=9, color=EMERALD_700, name='Arial')
+    ws['D8'].alignment = Alignment(horizontal='center', vertical='center')
+
+    # Card 3 (F6:G8): MUA CHUYỂN KHOẢN CAO NHẤT
+    ws.merge_cells('F6:G6')
+    ws['F6'].value = '💳 MUA CHUYỂN KHOẢN CAO NHẤT'
+    ws.merge_cells('F7:G7')
+    ws['F7'].value = '=MAX(D12:D26)'
+    ws.merge_cells('F8:G8')
+    ws['F8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B26, MATCH(MAX(D12:D26), D12:D26, 0)))'
+    
+    apply_box_style(ws, 'F6', 'G8', fill=PatternFill(start_color=BLUE_100, end_color=BLUE_100, fill_type='solid'),
+                    border=Border(left=Side(style='thin', color=BLUE_BORDER), right=Side(style='thin', color=BLUE_BORDER),
+                                  top=Side(style='thin', color=BLUE_BORDER), bottom=Side(style='thin', color=BLUE_BORDER)))
+    ws['F6'].font = Font(bold=True, size=9, color=BLUE_700, name='Arial')
+    ws['F6'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['F7'].font = Font(bold=True, size=16, color=BLUE_800, name='Arial')
+    ws['F7'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['F7'].number_format = '#,##0.00'
+    ws['F8'].font = Font(italic=True, size=9, color=BLUE_800, name='Arial')
+    ws['F8'].alignment = Alignment(horizontal='center', vertical='center')
+
+    # Card 4 (H6:I8): SPREAD THỊ TRƯỜNG TB
+    ws.merge_cells('H6:I6')
+    ws['H6'].value = '📊 SPREAD MUA - BÁN TB'
+    ws.merge_cells('H7:I7')
+    ws['H7'].value = '=AVERAGE(F12:F26)'
+    ws.merge_cells('H8:I8')
+    ws['H8'].value = 'Chênh lệch trung bình thị trường'
+    
+    apply_box_style(ws, 'H6', 'I8', fill=PatternFill(start_color=SLATE_100, end_color=SLATE_100, fill_type='solid'),
+                    border=Border(left=Side(style='thin', color=SLATE_200), right=Side(style='thin', color=SLATE_200),
+                                  top=Side(style='thin', color=SLATE_200), bottom=Side(style='thin', color=SLATE_200)))
+    ws['H6'].font = Font(bold=True, size=9, color=SLATE_600, name='Arial')
+    ws['H6'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['H7'].font = Font(bold=True, size=16, color=SLATE_900, name='Arial')
+    ws['H7'].alignment = Alignment(horizontal='center', vertical='center')
+    ws['H7'].number_format = '#,##0.00'
+    ws['H8'].font = Font(italic=True, size=9, color=SLATE_500, name='Arial')
+    ws['H8'].alignment = Alignment(horizontal='center', vertical='center')
+
+    ws.row_dimensions[6].height = 20
+    ws.row_dimensions[7].height = 28
+    ws.row_dimensions[8].height = 20
+    ws.row_dimensions[9].height = 12  # Spacer
+    
+    # ── SECTION LABEL (Row 10) ──
+    ws.merge_cells('B10:I10')
+    ws['B10'].value = '📋 MA TRẬN SO SÁNH TỶ GIÁ CHI TIẾT 15 NGÂN HÀNG'
+    ws['B10'].font = Font(bold=True, size=11, color=SLATE_800, name='Arial')
+    ws['B10'].alignment = Alignment(horizontal='left', vertical='center')
+    ws.row_dimensions[10].height = 24
+    
+    # ── TABLE HEADERS (Row 11) ──
     table_headers = [
         'Ngân hàng', 'Mua tiền mặt', 'Mua chuyển khoản', 'Bán', 
         'Chênh lệch Mua-Bán', 'Bán (SS)', 'Chênh lệch', '% So sánh'
     ]
     table_cols = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
     for col_letter, text in zip(table_cols, table_headers):
-        cell = ws[f'{col_letter}7']
+        cell = ws[f'{col_letter}11']
         cell.value = text
-        cell.font = font_header
-        cell.fill = fill_header_blue if col_letter in ('G', 'H', 'I') else fill_header_green
+        cell.font = Font(bold=True, color=WHITE, size=10, name='Arial')
+        cell.fill = PatternFill(start_color=BLUE_800, end_color=BLUE_800, fill_type='solid') if col_letter in ('G', 'H', 'I') else PatternFill(start_color=SLATE_800, end_color=SLATE_800, fill_type='solid')
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.border = border_thin
-    ws.row_dimensions[7].height = 35
+        cell.border = border_grid
+    ws.row_dimensions[11].height = 32
     
-    banks = ["Vietcombank", "VietinBank", "BIDV", "Techcombank", "ACB", "SeaBank"]
+    # ── 15 BANKS LIST ──
+    banks = [
+        "Vietcombank", "VietinBank", "BIDV", "Agribank",
+        "Techcombank", "ACB", "Sacombank", "TPBank", "VPBank",
+        "HDBank", "Eximbank", "OCB", "SeaBank", "VietABank", "PVcomBank"
+    ]
+    first_data_row = 12
+    last_data_row = first_data_row + len(banks) - 1  # 26
+    
+    fill_even = PatternFill(start_color=SLATE_50, end_color=SLATE_50, fill_type='solid')
+    fill_compare = PatternFill(start_color=BLUE_50, end_color=BLUE_50, fill_type='solid')
+    fill_compare_even = PatternFill(start_color='E0F2FE', end_color='E0F2FE', fill_type='solid')
     
     for i, bank in enumerate(banks):
-        row_idx = 8 + i
-        ws.row_dimensions[row_idx].height = 28
+        row_idx = first_data_row + i
+        ws.row_dimensions[row_idx].height = 26
         
+        # B: Ngân hàng
         ws[f'B{row_idx}'].value = bank
-        ws[f'B{row_idx}'].font = font_bold
-        ws[f'B{row_idx}'].border = border_thin
+        ws[f'B{row_idx}'].font = Font(bold=True, size=10, color=SLATE_900, name='Arial')
+        ws[f'B{row_idx}'].border = border_grid
         ws[f'B{row_idx}'].alignment = Alignment(horizontal='left', vertical='center')
         
+        # C: Mua tiền mặt
         ws[f'C{row_idx}'].value = f'=IF(SUMIFS(Data_TheoDoi_USD!$C$2:$C$10000, Data_TheoDoi_USD!$A$2:$A$10000, $B$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx})=0, "-", SUMIFS(Data_TheoDoi_USD!$C$2:$C$10000, Data_TheoDoi_USD!$A$2:$A$10000, $B$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx}))'
-        ws[f'C{row_idx}'].font = font_body
-        ws[f'C{row_idx}'].border = border_thin
+        ws[f'C{row_idx}'].font = Font(size=10, name='Arial')
+        ws[f'C{row_idx}'].border = border_grid
         ws[f'C{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'C{row_idx}'].number_format = '#,##0.00'
         
+        # D: Mua chuyển khoản
         ws[f'D{row_idx}'].value = f'=IF(SUMIFS(Data_TheoDoi_USD!$D$2:$D$10000, Data_TheoDoi_USD!$A$2:$A$10000, $B$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx})=0, "-", SUMIFS(Data_TheoDoi_USD!$D$2:$D$10000, Data_TheoDoi_USD!$A$2:$A$10000, $B$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx}))'
-        ws[f'D{row_idx}'].font = font_body
-        ws[f'D{row_idx}'].border = border_thin
+        ws[f'D{row_idx}'].font = Font(size=10, name='Arial')
+        ws[f'D{row_idx}'].border = border_grid
         ws[f'D{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'D{row_idx}'].number_format = '#,##0.00'
         
+        # E: Bán
         ws[f'E{row_idx}'].value = f'=IF(SUMIFS(Data_TheoDoi_USD!$E$2:$E$10000, Data_TheoDoi_USD!$A$2:$A$10000, $B$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx})=0, "-", SUMIFS(Data_TheoDoi_USD!$E$2:$E$10000, Data_TheoDoi_USD!$A$2:$A$10000, $B$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx}))'
-        ws[f'E{row_idx}'].font = Font(bold=True, color='C0392B', name='Arial')
-        ws[f'E{row_idx}'].border = border_thin
+        ws[f'E{row_idx}'].font = Font(bold=True, color='B91C1C', name='Arial', size=10)
+        ws[f'E{row_idx}'].border = border_grid
         ws[f'E{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'E{row_idx}'].number_format = '#,##0.00'
         
+        # F: Chênh lệch Mua - Bán
         ws[f'F{row_idx}'].value = f'=IF(AND(ISNUMBER(E{row_idx}), ISNUMBER(D{row_idx})), E{row_idx}-D{row_idx}, "-")'
-        ws[f'F{row_idx}'].font = font_body
-        ws[f'F{row_idx}'].border = border_thin
+        ws[f'F{row_idx}'].font = Font(size=10, name='Arial')
+        ws[f'F{row_idx}'].border = border_grid
         ws[f'F{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'F{row_idx}'].number_format = '#,##0.00'
         
+        # G: Bán (SS)
         ws[f'G{row_idx}'].value = f'=IF(SUMIFS(Data_TheoDoi_USD!$E$2:$E$10000, Data_TheoDoi_USD!$A$2:$A$10000, $E$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx})=0, "-", SUMIFS(Data_TheoDoi_USD!$E$2:$E$10000, Data_TheoDoi_USD!$A$2:$A$10000, $E$4, Data_TheoDoi_USD!$B$2:$B$10000, $B{row_idx}))'
-        ws[f'G{row_idx}'].font = font_body
-        ws[f'G{row_idx}'].border = border_thin
+        ws[f'G{row_idx}'].font = Font(size=10, name='Arial')
+        ws[f'G{row_idx}'].border = border_grid
         ws[f'G{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'G{row_idx}'].number_format = '#,##0.00'
-        ws[f'G{row_idx}'].fill = fill_compare_blue
+        ws[f'G{row_idx}'].fill = fill_compare
         
+        # H: Chênh lệch
         ws[f'H{row_idx}'].value = f'=IF(AND(ISNUMBER(E{row_idx}), ISNUMBER(G{row_idx})), E{row_idx}-G{row_idx}, "-")'
-        ws[f'H{row_idx}'].font = font_bold
-        ws[f'H{row_idx}'].border = border_thin
+        ws[f'H{row_idx}'].font = Font(bold=True, size=10, name='Arial')
+        ws[f'H{row_idx}'].border = border_grid
         ws[f'H{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'H{row_idx}'].number_format = '+#,##0.00;-#,##0.00;0.00'
-        ws[f'H{row_idx}'].fill = fill_compare_blue
+        ws[f'H{row_idx}'].fill = fill_compare
         
+        # I: % So sánh
         ws[f'I{row_idx}'].value = f'=IF(AND(ISNUMBER(E{row_idx}), ISNUMBER(G{row_idx}), G{row_idx}<>0), (E{row_idx}-G{row_idx})/G{row_idx}*100, "-")'
-        ws[f'I{row_idx}'].font = font_bold
-        ws[f'I{row_idx}'].border = border_thin
+        ws[f'I{row_idx}'].font = Font(bold=True, size=10, name='Arial')
+        ws[f'I{row_idx}'].border = border_grid
         ws[f'I{row_idx}'].alignment = Alignment(horizontal='right', vertical='center')
         ws[f'I{row_idx}'].number_format = '+0.00"%";-0.00"%";0.00"%"'
-        ws[f'I{row_idx}'].fill = fill_compare_blue
+        ws[f'I{row_idx}'].fill = fill_compare
         
         if i % 2 == 1:
             for col in ['B', 'C', 'D', 'E', 'F']:
-                ws[f'{col}{row_idx}'].fill = fill_even_row
+                ws[f'{col}{row_idx}'].fill = fill_even
             for col in ['G', 'H', 'I']:
-                ws[f'{col}{row_idx}'].fill = PatternFill(start_color='BBDEFB', end_color='BBDEFB', fill_type='solid')
-                
-    green_font = Font(bold=True, size=11, color='27AE60', name='Arial')
-    red_font = Font(bold=True, size=11, color='C0392B', name='Arial')
-    best_buy_fill = PatternFill(start_color=THEME_GREEN_LIGHT, end_color=THEME_GREEN_LIGHT, fill_type='solid')
-    best_buy_font = Font(bold=True, color='2E7D32', name='Arial', size=11)
-    best_sell_fill = PatternFill(start_color='FFEB3B', end_color='FFEB3B', fill_type='solid')
-    best_sell_font = Font(bold=True, color='827717', name='Arial', size=11)
+                ws[f'{col}{row_idx}'].fill = fill_compare_even
+
+    # ── SUMMARY ROW: MARKET AVERAGE (Row 27) ──
+    avg_row = last_data_row + 1
+    ws.row_dimensions[avg_row].height = 28
+    ws[f'B{avg_row}'].value = 'TRUNG BÌNH THỊ TRƯỜNG'
+    ws[f'B{avg_row}'].font = Font(bold=True, size=10, color=SLATE_900, name='Arial')
+    ws[f'B{avg_row}'].alignment = Alignment(horizontal='left', vertical='center')
+    ws[f'B{avg_row}'].border = border_card
+    ws[f'B{avg_row}'].fill = PatternFill(start_color=SLATE_100, end_color=SLATE_100, fill_type='solid')
+
+    for col_l in ['C', 'D', 'E', 'F', 'G']:
+        cell = ws[f'{col_l}{avg_row}']
+        cell.value = f'=AVERAGE({col_l}{first_data_row}:{col_l}{last_data_row})'
+        cell.font = Font(bold=True, size=10, color=SLATE_900, name='Arial')
+        cell.alignment = Alignment(horizontal='right', vertical='center')
+        cell.border = border_card
+        cell.number_format = '#,##0.00'
+        cell.fill = PatternFill(start_color=SLATE_100, end_color=SLATE_100, fill_type='solid')
+
+    ws[f'H{avg_row}'].value = f'=AVERAGE(H{first_data_row}:H{last_data_row})'
+    ws[f'H{avg_row}'].font = Font(bold=True, size=10, color=BLUE_800, name='Arial')
+    ws[f'H{avg_row}'].alignment = Alignment(horizontal='right', vertical='center')
+    ws[f'H{avg_row}'].border = border_card
+    ws[f'H{avg_row}'].number_format = '+#,##0.00;-#,##0.00;0.00'
+    ws[f'H{avg_row}'].fill = PatternFill(start_color=BLUE_100, end_color=BLUE_100, fill_type='solid')
+
+    ws[f'I{avg_row}'].value = f'=AVERAGE(I{first_data_row}:I{last_data_row})'
+    ws[f'I{avg_row}'].font = Font(bold=True, size=10, color=BLUE_800, name='Arial')
+    ws[f'I{avg_row}'].alignment = Alignment(horizontal='right', vertical='center')
+    ws[f'I{avg_row}'].border = border_card
+    ws[f'I{avg_row}'].number_format = '+0.00"%";-0.00"%";0.00"%"'
+    ws[f'I{avg_row}'].fill = PatternFill(start_color=BLUE_100, end_color=BLUE_100, fill_type='solid')
+
+    # ── CONDITIONAL FORMATTING ──
+    best_buy_fill = PatternFill(start_color=EMERALD_100, end_color=EMERALD_100, fill_type='solid')
+    best_buy_font = Font(bold=True, color=EMERALD_700, name='Arial', size=10)
+    best_sell_fill = PatternFill(start_color=AMBER_100, end_color=AMBER_100, fill_type='solid')
+    best_sell_font = Font(bold=True, color=AMBER_800, name='Arial', size=10)
     
-    ws.conditional_formatting.add('C8:C13', FormulaRule(formula=['C8=MAX($C$8:$C$13)'], fill=best_buy_fill, font=best_buy_font))
-    ws.conditional_formatting.add('D8:D13', FormulaRule(formula=['D8=MAX($D$8:$D$13)'], fill=best_buy_fill, font=best_buy_font))
-    ws.conditional_formatting.add('E8:E13', FormulaRule(formula=['E8=MIN($E$8:$E$13)'], fill=best_sell_fill, font=best_sell_font))
+    ws.conditional_formatting.add(f'C{first_data_row}:C{last_data_row}', FormulaRule(formula=[f'C{first_data_row}=MAX($C${first_data_row}:$C${last_data_row})'], fill=best_buy_fill, font=best_buy_font))
+    ws.conditional_formatting.add(f'D{first_data_row}:D{last_data_row}', FormulaRule(formula=[f'D{first_data_row}=MAX($D${first_data_row}:$D${last_data_row})'], fill=best_buy_fill, font=best_buy_font))
+    ws.conditional_formatting.add(f'E{first_data_row}:E{last_data_row}', FormulaRule(formula=[f'E{first_data_row}=MIN($E${first_data_row}:$E${last_data_row})'], fill=best_sell_fill, font=best_sell_font))
     
-    ws.conditional_formatting.add('H8:H13', CellIsRule(operator='greaterThan', formula=['0'], font=red_font))
-    ws.conditional_formatting.add('H8:H13', CellIsRule(operator='lessThan', formula=['0'], font=green_font))
-    ws.conditional_formatting.add('I8:I13', CellIsRule(operator='greaterThan', formula=['0'], font=red_font))
-    ws.conditional_formatting.add('I8:I13', CellIsRule(operator='lessThan', formula=['0'], font=green_font))
-    
+    green_diff_font = Font(bold=True, size=10, color=GREEN_ACCENT, name='Arial')
+    red_diff_font = Font(bold=True, size=10, color=RED_ACCENT, name='Arial')
+    ws.conditional_formatting.add(f'H{first_data_row}:H{last_data_row}', CellIsRule(operator='greaterThan', formula=['0'], font=red_diff_font))
+    ws.conditional_formatting.add(f'H{first_data_row}:H{last_data_row}', CellIsRule(operator='lessThan', formula=['0'], font=green_diff_font))
+    ws.conditional_formatting.add(f'I{first_data_row}:I{last_data_row}', CellIsRule(operator='greaterThan', formula=['0'], font=red_diff_font))
+    ws.conditional_formatting.add(f'I{first_data_row}:I{last_data_row}', CellIsRule(operator='lessThan', formula=['0'], font=green_diff_font))
+
+    # ── MODERN FLAT BARCHART ──
     chart = BarChart()
     chart.type = "col"
-    chart.style = 11
-    chart.title = "So Sánh Tỷ Giá USD/VND Giữa Các Ngân Hàng"
+    chart.style = 10
+    chart.title = "So Sánh Tỷ Giá USD/VND Giữa 15 Ngân Hàng"
     chart.y_axis.title = "VND"
     chart.x_axis.title = "Ngân Hàng"
-    chart.width = 20
-    chart.height = 12
+    chart.width = 22
+    chart.height = 14
     
-    data_ref = Reference(ws, min_col=3, min_row=7, max_col=5, max_row=13)
-    cats_ref = Reference(ws, min_col=2, min_row=8, max_row=13)
+    data_ref = Reference(ws, min_col=3, min_row=11, max_col=5, max_row=last_data_row)
+    cats_ref = Reference(ws, min_col=2, min_row=12, max_row=last_data_row)
     chart.add_data(data_ref, titles_from_data=True)
     chart.set_categories(cats_ref)
     
-    colors = ['4CAF50', '2196F3', 'F44336']
+    # Modern Flat UI bar colors: Emerald, Royal Blue, Coral Red
+    colors = ['10B981', '2563EB', 'EF4444']
     for idx, col in enumerate(colors):
         if idx < len(chart.series):
             chart.series[idx].graphicalProperties.solidFill = col
             
-    chart.y_axis.scaling.min = 23000
+    chart.y_axis.scaling.min = 24000
     chart.y_axis.scaling.max = 27000
     
-    ws.add_chart(chart, "B16")
+    chart_start_row = avg_row + 3  # Row 30
+    ws.add_chart(chart, f"B{chart_start_row}")
     
-    source_row = 32
+    source_row = chart_start_row + 21
     ws.merge_cells(f'B{source_row}:I{source_row}')
-    ws[f'B{source_row}'].value = "Nguồn: Vietcombank, Vietinbank, BIDV, Techcombank, ACB, SeaBank"
-    ws[f'B{source_row}'].font = Font(italic=True, size=9, color='999999', name='Arial')
+    ws[f'B{source_row}'].value = f"Nguồn dữ liệu: {', '.join(banks[:4])} (Big 4) và các ngân hàng TMCP hàng đầu Việt Nam"
+    ws[f'B{source_row}'].font = Font(italic=True, size=9, color=SLATE_500, name='Arial')
     ws[f'B{source_row}'].alignment = Alignment(horizontal='center')
+
+
+def generate_html_dashboard(multi_bank_data, current_date_str, output_path=r'D:\Tygia-Tudong\dashboard.html'):
+    """Tự động sinh Executive Financial Dashboard dưới dạng Web HTML chuẩn UI/UX hiện đại."""
+    try:
+        valid_items = [x for x in multi_bank_data if x.get('sell') or x.get('buy_transfer') or x.get('buy_cash')]
+        if not valid_items:
+            return
+
+        sells = [x['sell'] for x in valid_items if x.get('sell')]
+        buy_cashes = [x['buy_cash'] for x in valid_items if x.get('buy_cash')]
+        buy_tfs = [x['buy_transfer'] for x in valid_items if x.get('buy_transfer')]
+        
+        min_sell = min(sells) if sells else 0
+        best_sell_banks = [x['bank'] for x in valid_items if x.get('sell') == min_sell]
+        
+        max_buy_cash = max(buy_cashes) if buy_cashes else 0
+        best_cash_banks = [x['bank'] for x in valid_items if x.get('buy_cash') == max_buy_cash]
+        
+        max_buy_tf = max(buy_tfs) if buy_tfs else 0
+        best_tf_banks = [x['bank'] for x in valid_items if x.get('buy_transfer') == max_buy_tf]
+        
+        spreads = [(x['sell'] - x['buy_transfer']) for x in valid_items if x.get('sell') and x.get('buy_transfer')]
+        avg_spread = sum(spreads) / len(spreads) if spreads else 0
+        
+        big4_names = {"Vietcombank", "VietinBank", "BIDV", "Agribank"}
+        
+        rows_html = ""
+        chart_labels = []
+        chart_buy_cash = []
+        chart_buy_tf = []
+        chart_sell = []
+        
+        for item in valid_items:
+            bank = item.get('bank', '')
+            cash = item.get('buy_cash')
+            tf = item.get('buy_transfer')
+            sell = item.get('sell')
+            spread = (sell - tf) if (sell and tf) else None
+            
+            is_big4 = bank in big4_names
+            group_badge = '<span class="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-800 border border-amber-300">🏛️ Big 4</span>' if is_big4 else '<span class="px-2 py-0.5 text-xs font-semibold rounded bg-slate-100 text-slate-700 border border-slate-300">🏢 TMCP</span>'
+            
+            tags = []
+            if sell == min_sell:
+                tags.append('<span class="px-2 py-0.5 text-xs font-bold rounded bg-amber-500 text-white shadow-sm">BÁN RẺ NHẤT</span>')
+            if cash == max_buy_cash:
+                tags.append('<span class="px-2 py-0.5 text-xs font-bold rounded bg-emerald-600 text-white shadow-sm">MUA TM CAO NHẤT</span>')
+            if tf == max_buy_tf:
+                tags.append('<span class="px-2 py-0.5 text-xs font-bold rounded bg-blue-600 text-white shadow-sm">MUA CK CAO NHẤT</span>')
+            tag_html = " ".join(tags)
+            
+            cash_str = f"{cash:,.2f}" if cash else "-"
+            tf_str = f"{tf:,.2f}" if tf else "-"
+            sell_str = f"{sell:,.2f}" if sell else "-"
+            spread_str = f"{spread:,.2f}" if spread else "-"
+            
+            chart_labels.append(bank)
+            chart_buy_cash.append(cash if cash else 0)
+            chart_buy_tf.append(tf if tf else 0)
+            chart_sell.append(sell if sell else 0)
+            
+            rows_html += f"""
+            <tr class="hover:bg-slate-50 border-b border-slate-200 transition-colors bank-row" data-group="{'big4' if is_big4 else 'tmcp'}" data-bank="{bank.lower()}">
+                <td class="px-4 py-3 font-semibold text-slate-900 flex items-center gap-2">
+                    <span>{bank}</span>
+                    {group_badge}
+                    {tag_html}
+                </td>
+                <td class="px-4 py-3 text-right font-mono {'text-emerald-700 font-bold bg-emerald-50/50' if cash == max_buy_cash else 'text-slate-700'}">{cash_str}</td>
+                <td class="px-4 py-3 text-right font-mono {'text-blue-700 font-bold bg-blue-50/50' if tf == max_buy_tf else 'text-slate-700'}">{tf_str}</td>
+                <td class="px-4 py-3 text-right font-mono font-bold {'text-amber-800 bg-amber-50/50' if sell == min_sell else 'text-red-600'}">{sell_str}</td>
+                <td class="px-4 py-3 text-right font-mono text-slate-600 font-medium">{spread_str}</td>
+            </tr>
+            """
+            
+        import json
+        chart_data_json = json.dumps({
+            "labels": chart_labels,
+            "cash": chart_buy_cash,
+            "tf": chart_buy_tf,
+            "sell": chart_sell
+        })
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Điều Hành Tỷ Giá USD/VND - Executive Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {{ font-family: 'Plus Jakarta Sans', sans-serif; }}
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+    <header class="bg-slate-900 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-white text-lg shadow-inner">
+                    $
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">EXECUTIVE FINANCIAL DASHBOARD</h1>
+                    <p class="text-xs text-slate-400">Tỷ Giá Ngoại Tệ USD/VND Toàn Thị Trường (15 Ngân Hàng)</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Cập nhật: {current_date_str}
+                </span>
+                <button onclick="window.print()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition">
+                    🖨️ In / Xuất PDF
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-2xl p-5 border border-amber-200 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-amber-100 rounded-full opacity-50 pointer-events-none"></div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-amber-800">🏆 Giá Bán Thấp Nhất</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Tốt Cho Mua</span>
+                </div>
+                <div class="mt-3 text-3xl font-extrabold text-amber-900 font-mono">
+                    {min_sell:,.2f} <span class="text-sm font-normal text-amber-700">VND</span>
+                </div>
+                <div class="mt-2 text-xs font-medium text-amber-800 flex items-center gap-1">
+                    <span>Tại:</span>
+                    <span class="font-bold underline">{', '.join(best_sell_banks)}</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 border border-emerald-200 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-emerald-100 rounded-full opacity-50 pointer-events-none"></div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-emerald-800">💰 Mua Tiền Mặt Cao Nhất</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">Đổi Ngoại Tệ</span>
+                </div>
+                <div class="mt-3 text-3xl font-extrabold text-emerald-900 font-mono">
+                    {max_buy_cash:,.2f} <span class="text-sm font-normal text-emerald-700">VND</span>
+                </div>
+                <div class="mt-2 text-xs font-medium text-emerald-800 flex items-center gap-1">
+                    <span>Tại:</span>
+                    <span class="font-bold underline">{', '.join(best_cash_banks)}</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 border border-blue-200 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-blue-100 rounded-full opacity-50 pointer-events-none"></div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-blue-800">💳 Mua Chuyển Khoản Cao Nhất</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold">Kiều Hối/CK</span>
+                </div>
+                <div class="mt-3 text-3xl font-extrabold text-blue-900 font-mono">
+                    {max_buy_tf:,.2f} <span class="text-sm font-normal text-blue-700">VND</span>
+                </div>
+                <div class="mt-2 text-xs font-medium text-blue-800 flex items-center gap-1">
+                    <span>Tại:</span>
+                    <span class="font-bold underline">{', '.join(best_tf_banks)}</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-slate-100 rounded-full opacity-50 pointer-events-none"></div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-600">📊 Spread Thị Trường TB</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">Biên Độ</span>
+                </div>
+                <div class="mt-3 text-3xl font-extrabold text-slate-900 font-mono">
+                    {avg_spread:,.2f} <span class="text-sm font-normal text-slate-500">VND</span>
+                </div>
+                <div class="mt-2 text-xs font-medium text-slate-500">
+                    Chênh lệch Mua - Bán trung bình 15 banks
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <button onclick="filterGroup('all')" class="filter-btn active px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-sm transition">
+                    Tất cả (15)
+                </button>
+                <button onclick="filterGroup('big4')" class="filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                    🏛️ Big 4 (4)
+                </button>
+                <button onclick="filterGroup('tmcp')" class="filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                    🏢 TMCP (11)
+                </button>
+            </div>
+            <div class="w-full sm:w-72">
+                <input type="text" id="searchInput" onkeyup="searchBank()" placeholder="🔍 Tìm kiếm ngân hàng..." 
+                       class="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50">
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                    <h2 class="font-bold text-slate-900 text-base">Bảng Tỷ Giá USD/VND Chi Tiết</h2>
+                    <p class="text-xs text-slate-500">Đơn vị: VNĐ / 1 USD</p>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm" id="rateTable">
+                    <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200 font-bold">
+                        <tr>
+                            <th class="px-4 py-3">Ngân Hàng</th>
+                            <th class="px-4 py-3 text-right">Mua Tiền Mặt</th>
+                            <th class="px-4 py-3 text-right">Mua Chuyển Khoản</th>
+                            <th class="px-4 py-3 text-right">Giá Bán</th>
+                            <th class="px-4 py-3 text-right">Spread (Bán - Mua)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_html}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div class="mb-4 flex items-center justify-between">
+                <div>
+                    <h2 class="font-bold text-slate-900 text-base">Biểu Đồ So Sánh Trực Quan 15 Ngân Hàng</h2>
+                    <p class="text-xs text-slate-500">So sánh trực quan giữa Mua Tiền Mặt, Mua Chuyển Khoản và Giá Bán</p>
+                </div>
+            </div>
+            <div class="h-96">
+                <canvas id="rateChart"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <footer class="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-slate-400">
+        Hệ Thống Thu Thập & Báo Cáo Tỷ Giá Tự Động • Tác vụ chạy định kỳ lúc 23:00 hàng ngày
+    </footer>
+
+    <script>
+        const chartData = {chart_data_json};
+        const ctx = document.getElementById('rateChart').getContext('2d');
+        new Chart(ctx, {{
+            type: 'bar',
+            data: {{
+                labels: chartData.labels,
+                datasets: [
+                    {{
+                        label: 'Mua Tiền Mặt',
+                        data: chartData.cash,
+                        backgroundColor: '#10B981',
+                        borderRadius: 4,
+                    }},
+                    {{
+                        label: 'Mua Chuyển Khoản',
+                        data: chartData.tf,
+                        backgroundColor: '#2563EB',
+                        borderRadius: 4,
+                    }},
+                    {{
+                        label: 'Giá Bán',
+                        data: chartData.sell,
+                        backgroundColor: '#EF4444',
+                        borderRadius: 4,
+                    }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {{
+                    y: {{
+                        min: 24000,
+                        max: 26800,
+                        ticks: {{
+                            callback: function(value) {{ return value.toLocaleString('vi-VN'); }}
+                        }}
+                    }}
+                }},
+                plugins: {{
+                    legend: {{ position: 'top' }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: function(context) {{
+                                return context.dataset.label + ': ' + context.parsed.y.toLocaleString('vi-VN') + ' VND';
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }});
+
+        function filterGroup(group) {{
+            document.querySelectorAll('.filter-btn').forEach(btn => {{
+                btn.classList.remove('bg-slate-900', 'text-white');
+                btn.classList.add('bg-slate-100', 'text-slate-700');
+            }});
+            event.target.classList.remove('bg-slate-100', 'text-slate-700');
+            event.target.classList.add('bg-slate-900', 'text-white');
+
+            const rows = document.querySelectorAll('.bank-row');
+            rows.forEach(r => {{
+                if (group === 'all' || r.getAttribute('data-group') === group) {{
+                    r.style.display = '';
+                }} else {{
+                    r.style.display = 'none';
+                }}
+            }});
+        }}
+
+        function searchBank() {{
+            const filter = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('.bank-row');
+            rows.forEach(r => {{
+                const bankName = r.getAttribute('data-bank');
+                if (bankName.includes(filter)) {{
+                    r.style.display = '';
+                }} else {{
+                    r.style.display = 'none';
+                }}
+            }});
+        }}
+    </script>
+</body>
+</html>
+"""
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        logger.info(f"🌐 Đã tạo Web Dashboard tương tác: {output_path}")
+    except Exception as e:
+        logger.warning(f"⚠ Lỗi tạo HTML Dashboard: {e}")
+
+
 
 
 def backup_excel(filename):
@@ -833,14 +1795,15 @@ def acquire_process_lock():
     os.makedirs(r'D:\Tygia-Tudong\Temp', exist_ok=True)
     try:
         import msvcrt
-        f = open(lock_path, 'w')
+        f = open(lock_path, 'a+')
         msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
         _process_lock_file = f
         return True
-    except (IOError, OSError):
+    except (IOError, OSError, PermissionError):
         logger.warning("⚠️ Một tiến trình get_rates.py khác đang chạy. Dừng tiến trình hiện tại để tránh xung đột file.")
         return False
-    except Exception:
+    except Exception as e:
+        logger.warning(f"⚠️ Lỗi không xác định khi acquire lock: {e}")
         return True
 
 def release_process_lock():
@@ -977,13 +1940,12 @@ def save_to_excel(data, filename):
             pass
 
     try:
-        # Bước 1: Ghi sheet Data vào file tạm
-        logger.info("Bước 1/3: Ghi sheet Data...")
+        # Ghi và cập nhật tất cả các sheet trong một chu trình xử lý duy nhất
+        logger.info("Đang cập nhật các sheet dữ liệu và Dashboard...")
         import shutil
         if os.path.exists(filename) and os.path.getsize(filename) > 0:
             shutil.copy2(filename, temp_filename)
             logger.info("Preserved existing sheets by copying file to temp_filename.")
-            # Overwrite only the Data sheet
             wb = load_workbook(temp_filename)
             if 'Data' in wb.sheetnames:
                 ws_data = wb['Data']
@@ -991,7 +1953,6 @@ def save_to_excel(data, filename):
             else:
                 ws_data = wb.create_sheet('Data')
             
-            # Write df_combined to ws_data
             # Headers
             for col_idx, col_name in enumerate(df_combined.columns, 1):
                 ws_data.cell(row=1, column=col_idx, value=col_name)
@@ -1002,27 +1963,18 @@ def save_to_excel(data, filename):
                         ws_data.cell(row=row_idx, column=col_idx, value=None)
                     else:
                         ws_data.cell(row=row_idx, column=col_idx, value=val)
-            wb.save(temp_filename)
-            wb.close()
         else:
             with pd.ExcelWriter(temp_filename, engine='openpyxl') as writer:
                 df_combined.to_excel(writer, sheet_name='Data', index=False)
+            wb = load_workbook(temp_filename)
 
-        # Bước 2: Format Data sheet
-        logger.info("Bước 2/3: Format Data sheet...")
-        wb = load_workbook(temp_filename)
+        # Format Data sheet
         _format_data_sheet(wb['Data'])
-        wb.save(temp_filename)
 
-        # Bước 3: Tạo Dashboard trên file tạm
-        logger.info("Bước 3: Tạo Dashboard...")
-        wb = load_workbook(temp_filename)
+        # Tạo Dashboard
         _create_dashboard_with_date_picker(wb, df_combined)
-        wb.save(temp_filename)
-        wb.close()
 
-        # Bước 4: Thu thập và so sánh tỷ giá USD các ngân hàng
-        logger.info("Bước 4: Thu thập và so sánh tỷ giá USD các ngân hàng...")
+        # Thu thập và so sánh tỷ giá USD các ngân hàng
         try:
             vcb_usd_data = None
             if data:
@@ -1036,7 +1988,6 @@ def save_to_excel(data, filename):
                         break
             
             multi_bank_data = get_multi_bank_rates(vcb_usd_data)
-            
             current_date_str = datetime.now().strftime('%d/%m/%Y')
             if vcb_usd_data and len(data) > 0 and 'Ngày Cập Nhật' in data[0]:
                 try:
@@ -1045,16 +1996,18 @@ def save_to_excel(data, filename):
                 except Exception as ex_dt:
                     logger.warning(f"Không thể parse Ngày Cập Nhật: {ex_dt}")
             
-            wb = load_workbook(temp_filename)
             _save_multi_bank_data(wb, multi_bank_data, current_date_str)
             _create_multi_bank_comparison_sheet(wb, current_date_str)
-            wb.save(temp_filename)
-            wb.close()
-            logger.info("Đã tạo và cập nhật sheet so sánh tỷ giá USD.")
+            generate_html_dashboard(multi_bank_data, current_date_str)
+            logger.info("Đã tạo và cập nhật sheet so sánh tỷ giá USD và file dashboard.html.")
         except Exception as e_multi:
             logger.error(f"Lỗi khi thu thập/so sánh tỷ giá các ngân hàng: {e_multi}")
             import traceback
             logger.error(traceback.format_exc())
+
+        # Lưu và đóng workbook hoàn tất
+        wb.save(temp_filename)
+        wb.close()
 
         # Kiểm tra tính toàn vẹn của file tạm trước khi ghi đè
         try:
@@ -1777,7 +2730,11 @@ def _create_usd_monthly_sheet(wb):
     ws.column_dimensions['AA'].hidden = True
     
     # Write bank list to hidden column AB
-    banks = ['Vietcombank', 'VietinBank', 'BIDV', 'Techcombank', 'ACB', 'SeaBank']
+    banks = [
+        'Vietcombank', 'VietinBank', 'BIDV', 'Agribank',
+        'Techcombank', 'ACB', 'Sacombank', 'TPBank', 'VPBank',
+        'HDBank', 'Eximbank', 'OCB', 'SeaBank', 'VietABank', 'PVcomBank'
+    ]
     for i, b in enumerate(banks, 1):
         ws.cell(i, 28, b)
     ws.column_dimensions['AB'].hidden = True
@@ -1790,7 +2747,7 @@ def _create_usd_monthly_sheet(wb):
     dv_month.add(ws['F4'])
     
     # Dropdown validation for Bank
-    dv_bank = DataValidation(type="list", formula1="=$AB$1:$AB$6", allow_blank=False)
+    dv_bank = DataValidation(type="list", formula1=f"=$AB$1:$AB${len(banks)}", allow_blank=False)
     dv_bank.prompt = "Chọn ngân hàng cần xem tỷ giá"
     dv_bank.promptTitle = "Chọn ngân hàng"
     ws.add_data_validation(dv_bank)

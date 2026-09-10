@@ -92,29 +92,35 @@ def _load_vietinbank_history():
         print(f"  ⚠ Lỗi fetch VietinBank history: {e}")
 
 
-def fetch_vietinbank_usd_current(date_str_yyyy_mm_dd):
-    """Fetch VietinBank current rate via Server Action (for today's data)."""
+def fetch_vietinbank_usd_current(date_str_yyyy_mm_dd, target_time="17:15:00"):
+    """Fetch VietinBank current/specific date rate via Server Action (prioritizing 17:15:00)."""
     url = "https://www.vietinbank.vn/ty-gia-khcn"
     action = "1e43a43a5124d6cc3cb463bc54021b34f39a4065"
     h = {**HEADERS, "Content-Type": "text/plain;charset=UTF-8",
          "next-action": action, "accept": "text/x-component",
          "referer": "https://www.vietinbank.vn/ty-gia-khcn"}
     
-    try:
-        r = requests.post(url, headers=h, data=json.dumps([f"{date_str_yyyy_mm_dd}T15:45:00", "USD"]),
-                         verify=False, timeout=10)
-        for line in r.text.strip().split('\n'):
-            if line.startswith("1:"):
-                data = json.loads(line[2:])
-                if data and isinstance(data, list) and len(data) > 0:
-                    item = data[0]
-                    return {
-                        'buy_cash': item.get('cash_rate_big'),
-                        'buy_transfer': item.get('transfer_rate'),
-                        'sell': item.get('sell_rate')
-                    }
-    except Exception as e:
-        pass
+    candidate_times = [target_time, "18:00:00", "17:00:00", "16:30:00", "15:45:00", "14:00:00", "11:30:00", "09:00:00"]
+    seen = set()
+    times_to_try = [t for t in candidate_times if not (t in seen or seen.add(t))]
+
+    for t_str in times_to_try:
+        try:
+            r = requests.post(url, headers=h, data=json.dumps([f"{date_str_yyyy_mm_dd}T{t_str}", "USD"]),
+                             verify=False, timeout=10)
+            for line in r.text.strip().split('\n'):
+                if line.startswith("1:"):
+                    data = json.loads(line[2:])
+                    if data and isinstance(data, list) and len(data) > 0:
+                        item = data[0]
+                        if item.get('transfer_rate') or item.get('sell_rate') or item.get('cash_rate_big'):
+                            return {
+                                'buy_cash': clean_rate_val(item.get('cash_rate_big')),
+                                'buy_transfer': clean_rate_val(item.get('transfer_rate')),
+                                'sell': clean_rate_val(item.get('sell_rate'))
+                            }
+        except Exception as e:
+            continue
     return None
 
 

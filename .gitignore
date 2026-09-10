@@ -1,14 +1,30 @@
+# Python & Virtual Environments
 .venv/
+.venv_d/
 __pycache__/
-*.xlsx
-*.log
-*.zip
+*.pyc
+
+# Operating System & Temporary Files
+Temp/
+tmp/
 Backup/
 scratch/
 .tempmediaStorage/
-*.csv
-*.json
-Temp/
-tmp/
+*.log
+*.zip
 *.txt
 test_playwright.py
+temp_api_response.json
+temp_current_data.csv
+
+# Data and Spreadsheets (Allow primary excel and docs assets)
+*.xlsx
+!TyGia_Banking.xlsx
+!docs/TyGia_Banking.xlsx
+~$*.xlsx
+*Test*.xlsx
+
+# JSON Data (Allow docs json)
+*.json
+!docs/rates_history.json
+

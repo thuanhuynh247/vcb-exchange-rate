@@ -20,8 +20,8 @@ $action = New-ScheduledTaskAction `
     -Argument """$scriptPath""" `
     -WorkingDirectory "D:\Tygia-Tudong\scripts"
 
-# Trigger: 18h00 mỗi ngày
-$trigger = New-ScheduledTaskTrigger -Daily -At 6:00PM
+# Trigger: 23h00 mỗi ngày
+$trigger = New-ScheduledTaskTrigger -Daily -At 11:00PM
 
 # Settings nâng cao
 $settings = New-ScheduledTaskSettingsSet `
@@ -39,13 +39,13 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -TaskName $taskName `
-    -Description "Tự động lấy tỷ giá VCB vào 18h00 mỗi ngày. Retry 3 lần nếu thất bại. Chạy lại khi bật máy nếu bỏ lỡ." `
+    -Description "Tự động lấy tỷ giá các ngân hàng vào 23h00 mỗi ngày. Retry 3 lần nếu thất bại. Chạy lại khi bật máy nếu bỏ lỡ." `
     -Force
 
 Write-Host ""
 Write-Host "✅ Đã thiết lập Task Scheduler:"
-Write-Host "   📅 Chạy lúc: 18h00 mỗi ngày"
+Write-Host "   📅 Chạy lúc: 23h00 mỗi ngày"
 Write-Host "   🔄 Retry: 3 lần, mỗi 10 phút nếu thất bại"
 Write-Host "   ⏰ Timeout: 15 phút"
-Write-Host "   🔌 StartWhenAvailable: Chạy lại nếu máy tắt lúc 18h"
+Write-Host "   🔌 StartWhenAvailable: Chạy lại nếu máy tắt lúc 23h"
 Write-Host "   🌐 Chỉ chạy khi có mạng"
