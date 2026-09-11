@@ -596,6 +596,19 @@
                                 Sao chép chi tiết
                             </button>
                         </div>
+                        <!-- Vietcombank Benchmark Reference -->
+                        <div class="mt-2.5 pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+                            <div class="flex items-center gap-1.5 truncate">
+                                <span class="text-emerald-400 font-extrabold flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                    🏛️ Chuẩn Vietcombank:
+                                </span>
+                                <span id="calcVcbComparison" class="font-mono font-bold text-white">-- VND</span>
+                            </div>
+                            <button onclick="copyVcbComparisonRate()" class="text-[10px] font-extrabold text-slate-300 hover:text-emerald-300 underline cursor-pointer shrink-0" title="Sao chép kết quả Vietcombank">
+                                Sao chép VCB
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1438,6 +1451,24 @@
                     const diffWorst = Math.round(amount * (bestRate - worstRate));
                     document.getElementById('calcAdvantageText').innerText = diffWorst > 0 ? `Nhận thêm được +${formatNumber(diffWorst)} VND so với ${worstBank}!` : '';
                 }
+
+                // Populate Vietcombank Benchmark Comparison
+                if (banks['Vietcombank']) {
+                    const vcb = banks['Vietcombank'];
+                    const vcbRate = (type === 'transfer') ? vcb.transfer : (type === 'cash' ? vcb.cash : vcb.sell);
+                    const vcbTotal = Math.round(amount * vcbRate);
+                    const elVcbComp = document.getElementById('calcVcbComparison');
+                    if (elVcbComp) {
+                        elVcbComp.innerText = `${formatNumber(vcbTotal)} VND (Tỷ giá: ${formatNumber(vcbRate)})`;
+                    }
+                }
+            }
+        }
+
+        function copyVcbComparisonRate() {
+            const elVcbComp = document.getElementById('calcVcbComparison');
+            if (elVcbComp && elVcbComp.innerText) {
+                copyToClipboard(elVcbComp.innerText, "Đã sao chép quy đổi chuẩn Vietcombank: " + elVcbComp.innerText);
             }
         }
 
@@ -1566,7 +1597,8 @@
                 const isBestTrans = r.transfer === bestTransRate;
 
                 // Badges for Top 1
-                const bestBadge = isBestSell ? `<span class="ml-1.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-500 border border-amber-500/30">TOP BÁN</span>` : '';
+                const vcbBadge = r.bank === "Vietcombank" ? `<span class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">👑 Chuẩn Big 4</span>` : '';
+                const bestBadge = (isBestSell ? `<span class="ml-1.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-500 border border-amber-500/30">TOP BÁN</span>` : '') + vcbBadge;
                 const bankInfo = BANK_BADGES[r.bank] || { color: 'bg-slate-500/20 text-slate-400 border-slate-500/30', abbr: r.bank.substring(0, 3) };
 
                 // Diff badge
