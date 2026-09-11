@@ -1,87 +1,71 @@
 ---
 name: get-vcb-exchange-rate
 description: |
-  Tự động lấy tỷ giá ngoại tệ (tất cả 20+ ngoại tệ) từ trang web Vietcombank 
-  và lấy tỷ giá USD của nhiều ngân hàng (VietinBank, BIDV, Techcombank, ACB, SeaBank) 
-  để tổng hợp so sánh trực quan trong file Excel tại D:\Tygia-Tudong.
-  Được cài đặt chạy tự động bằng Windows Task Scheduler.
+  Tự động thu thập tỷ giá ngoại tệ từ Vietcombank (tất cả 20+ loại ngoại tệ) 
+  và tỷ giá USD/VND của 15 ngân hàng lớn nhất Việt Nam (Big 4 + TMCP hàng đầu). 
+  Tổng hợp tự động vào Excel Dashboard (D:\Tygia-Tudong\TyGia_Banking.xlsx) 
+  và triển khai Live Dashboard GitHub Pages theo chuẩn UI/UX Pro Max 2.1.
+  Tự động hóa hoàn toàn lịch chạy 23h00 hàng ngày qua Windows Task Scheduler.
 ---
 
-# Goal
-Tự động lấy tỷ giá **tất cả ngoại tệ** từ Vietcombank và tỷ giá **USD** từ nhiều ngân hàng lớn (VietinBank, BIDV, Techcombank, ACB, SeaBank). Lưu trữ cộng dồn và tạo Dashboard phân tích, so sánh trực quan. Toàn bộ tiến trình chạy tự động mỗi ngày thông qua Windows Task Scheduler.
+# Mục Tiêu Hệ Thống (Goal)
+Thu thập, chuẩn hóa và phân tích tỷ giá **USD/VND** của **15 ngân hàng lớn nhất Việt Nam** (**Vietcombank, VietinBank, BIDV, Agribank, Techcombank, ACB, Sacombank, TPBank, VPBank, HDBank, Eximbank, OCB, SeaBank, VietABank, PVcomBank**) và **toàn bộ 20+ ngoại tệ** của Vietcombank. Lưu trữ lịch sử liên tục từ 01/01/2026 đến nay, cung cấp bảng phân tích tài chính Excel chuyên nghiệp và cổng thông tin trực quan trên GitHub Pages.
 
-# Instructions
+---
 
-## Script chính: `scripts/get_rates.py`
-- Chạy tự động hằng ngày qua Task Scheduler (18h00) hoặc chạy thủ công.
-- Lấy **tất cả 20+ ngoại tệ** từ XML API của VCB.
-- Ghi dữ liệu cộng dồn vào sheet **Data** (có AutoFilter, dễ tìm kiếm).
-- **Thu thập tỷ giá USD đa ngân hàng**:
-  - **Vietcombank**: XML API.
-  - **BIDV**: JSON API (`ExchangeDetailServlet`).
-  - **Techcombank**: Integration JSON API.
-  - **ACB**: REST API (`effectiveDateTime` filter).
-  - **VietinBank & SeaBank**: Request HTTPS trực tiếp tới Server Action API (`next-action`) của từng trang, KHÔNG dùng Playwright/Chromium — toàn bộ 6 ngân hàng đều lấy bằng pure Python (`requests`), nhẹ và nhanh.
-- Ghi dữ liệu USD cộng dồn ẩn vào sheet **Data_TheoDoi_USD**.
-- Tạo sheet **TheoDoi_USD** nâng cao:
-  - **Date Picker** (B4): dropdown chọn ngày xem tỷ giá.
-  - **So sánh ngày** (E4): dropdown chọn ngày so sánh (hiển thị chênh lệch giá trị và % thay đổi).
-  - **Tìm giá trị tốt nhất (Conditional Formatting)**: Tự động highlight ngân hàng có giá mua cao nhất (Xanh lá) và ngân hàng có giá bán thấp nhất (Vàng) giúp tối ưu giao dịch.
-  - **Biểu đồ so sánh**: Cột biểu đồ BarChart so sánh trực quan giá Mua/Bán giữa 6 ngân hàng.
-- **Tính năng tự phục hồi & Dọn dẹp**:
-  - Tự động đóng Excel (`taskkill`) nếu file đang bị mở (tránh khóa file khi ghi).
-  - Tự động kiểm tra dung lượng trống ổ D, nếu `< 500MB` tiến hành dọn dẹp thư mục Temp và các bản backup cũ để giải phóng không gian.
-  - Tự khôi phục từ bản backup gần nhất nếu file chính bị lỗi hoặc 0 bytes.
-  - **Tự dò & tải bổ sung ngày bị thiếu (trong 30 ngày gần nhất, mỗi lần chạy)**, phòng trường hợp máy tắt hoặc Task Scheduler bị bỏ lỡ 1 ngày:
-    - `fetch_missing_historical_rates()`: bù các ngày thiếu của **Vietcombank** (sheet `Data`, tất cả ngoại tệ) qua API JSON của VCB.
-    - `fetch_missing_multibank_rates()`: bù các ngày thiếu của **VietinBank, BIDV, Techcombank, ACB, SeaBank** (sheet `Data_TheoDoi_USD`) bằng API lịch sử riêng của từng ngân hàng.
+# Hướng Dẫn & Quy Trình Thực Thi (Instructions)
 
-## Script lịch sử (VCB - tất cả ngoại tệ): `scripts/fetch_historical.py`
-- Chạy thủ công khi cần lấy dữ liệu lịch sử từ 2025-01-01.
-- Sử dụng JSON API của VCB, hỗ trợ đa luồng (10 workers).
-- Tự phát hiện dữ liệu cũ và chỉ lấy ngày còn thiếu.
+## 1. Script Cào Tỷ Giá Hằng Ngày: `scripts/get_rates.py`
+- Chạy tự động vào **23h00 mỗi ngày** qua Windows Task Scheduler để chốt chính xác giá đóng cửa phiên.
+- **Thu thập toàn diện 15 ngân hàng (Pure Python, không dùng Playwright)**:
+  - **Vietcombank**: XML API (`Usercontrols/TVPortal.TyGia/pXML.aspx?b=68`).
+  - **BIDV**: JSON API qua POST request (`ExchangeDetailServlet`).
+  - **Techcombank**: Integration JSON API qua token CSRF.
+  - **ACB**: REST API (`api/front/v1/currency?currency=VND`).
+  - **Agribank**: Trích xuất bảng tỷ giá niêm yết cổng thông tin & API WCM.
+  - **VietinBank & SeaBank**: Request HTTPS trực tiếp sử dụng Next.js Server Action (`next-action`).
+  - **PVcomBank**: Cổng API niêm yết chính thức (`exchange-rate-by-date?Date=YYYY-MM-DD`).
+  - **VietABank, VPBank, Sacombank, TPBank, Eximbank, HDBank, OCB**: Bộ trích xuất chuẩn hóa cao, tin cậy và tốn cực ít tài nguyên.
+- **Ghi dữ liệu cộng dồn vào Excel (`TyGia_Banking.xlsx`)**:
+  - Sheet `Data`: Toàn bộ 20+ ngoại tệ VCB.
+  - Sheet `Data_TheoDoi_USD`: Bảng tỷ giá USD cộng dồn của 15 ngân hàng.
+  - Sheet `TheoDoi_USD`: Executive Dashboard tương tác với Date Picker, Conditional Formatting, thẻ KPI và Biểu đồ.
+- **Cơ chế tự phục hồi & An toàn**:
+  - Đóng Excel tự động (`taskkill`) trước khi ghi file nhằm tránh khóa file.
+  - Kiểm tra dung lượng ổ đĩa D, dọn dẹp thư mục Temp và bản backup cũ nếu dung lượng `< 500MB`.
+  - Tự động khôi phục từ bản backup gần nhất nếu file chính bị lỗi.
 
-## Script lịch sử đa ngân hàng (USD - 6 ngân hàng): `scripts/fetch_historical_all_banks.py`
-- Chạy thủ công để backfill tỷ giá **USD** của cả 6 ngân hàng từ 2026-01-01 đến hiện tại vào sheet `Data_TheoDoi_USD`.
-- Dùng song song `ThreadPoolExecutor` (5 workers), cache riêng lịch sử VietinBank (2 request cho toàn bộ khoảng thời gian) để giảm số lượng gọi API.
-- Tự bỏ qua ngày/ngân hàng đã có dữ liệu hợp lệ, chỉ gọi API cho phần còn thiếu.
+## 2. GitHub Pages Live Dashboard: `index.html` & `docs/index.html`
+- **Chuẩn Thiết Kế UI/UX Pro Max 2.1**:
+  - **Hệ số chuẩn quốc tế**: Sử dụng dấu phẩy phân tách hàng nghìn `,000,000 VND` (`26,099,000 VND`, `25,720 VND`).
+  - **Bộ công cụ sao chép 1-click**: Hỗ trợ nhấp để copy từng ô tỷ giá, copy theo dòng ngân hàng, copy thẻ KPI, copy kết quả quy đổi, xuất bảng Excel (TSV) và tóm tắt văn bản gửi Zalo/Telegram.
+  - **Bento Grid & OLED Dark/Light Mode**: Tự động ghi nhớ cấu hình giao diện vào `localStorage`.
+  - **Bank Identity Badges**: Huy hiệu nhận diện 15 ngân hàng với màu thương hiệu chính xác.
+  - **Arbitrage Opportunity Card**: Tự động phát hiện cặp ngân hàng có biên độ chênh lệch giá tốt nhất thị trường.
+  - **Interactive FX Converter 2.0**: Quy đổi 2 chiều USD $\leftrightarrow$ VND, tự động đề xuất ngân hàng có lợi nhất.
+  - **Dual Chart Suite**: Biểu đồ cột phân cực và biểu đồ xu hướng đường toàn diện năm 2026 với bộ lọc nhanh (7N, 14N, 1T, 3T, 252N+).
+  - **Keyboard Navigation**: Phím `[` / `]` đổi ngày, `T` đổi theme, `/` tìm kiếm nhanh.
+- **Quy trình build & deploy**:
+  - Cập nhật dữ liệu vào `docs/rates_history.json`.
+  - Sinh mã HTML qua generator script và kiểm tra cú pháp AST bằng `node -c`.
+  - Đẩy lên nhánh `main`, GitHub Actions tự động kích hoạt workflow `Deploy GitHub Pages`.
 
-## Export PDF: `scripts/export_pdf.py`
-- Xuất báo cáo tỷ giá dạng PDF với branding VCB.
-- `python export_pdf.py` → ngày mới nhất.
-- `python export_pdf.py --date 10/03/2026` → ngày cụ thể.
-- `python export_pdf.py --compare 01/03/2026` → so sánh với ngày khác.
-- Output: `TyGia_Banking_YYYYMMDD.pdf` trong Documents.
+## 3. Tích Hợp Extension Phân Tích: `vscode-smart-data-viewer`
+- Extension `vnstock.vscode-smart-data-viewer` (v0.6.0) được lưu trong `tools/` và cài đặt tại các thư mục extension của IDE.
+- Cho phép mở trực tiếp `TyGia_Banking.xlsx`, `docs/rates_history.json`, hoặc các file CSV để chạy truy vấn DuckDB SQL và vẽ đồ thị EDA ngay trong trình soạn thảo.
 
-## Script kiểm tra: `scripts/test_excel.py`
-- Kiểm tra cấu trúc file Excel, format, Dashboard, Date Picker, so sánh 2 ngày, so sánh ngân hàng, biểu đồ, log file.
+## 4. Script Lịch Sử & Backfill
+- `scripts/fetch_historical.py`: Backfill dữ liệu ngoại tệ VCB.
+- `scripts/fetch_historical_all_banks.py`: Tải và chuẩn hóa lịch sử tỷ giá USD đa ngân hàng từ 01/01/2026 đến ngày hiện tại.
 
-## Cài đặt Task Scheduler: `scripts/setup_schedule.ps1`
-- Chạy bằng PowerShell (Admin) để đăng ký Task Scheduler.
-- Định cấu hình chạy mỗi ngày lúc 18h00.
-- Retry 3 lần mỗi 10 phút, timeout 15 phút, StartWhenAvailable.
+## 5. Lịch Trình Tự Động: `scripts/setup_schedule.ps1`
+- Chạy trên PowerShell Administrator để đăng ký Windows Task Scheduler.
+- Lịch chạy: **23h00 mỗi ngày**, tự động retry 3 lần, kích hoạt chế độ `StartWhenAvailable` để chạy bù nếu máy tính mở sau 23h.
 
-# Examples
-## File Excel Output (`D:\Tygia-Tudong\TyGia_Banking.xlsx`)
+---
 
-### Sheet "TheoDoi_USD"
-- **Date Picker** ô B4: dropdown danh sách ngày lịch sử.
-- **So sánh** ô E4: chọn ngày so sánh → cột G (Bán SS), H (Chênh lệch), I (% SS).
-- **Conditional formatting**:
-  - Ô có giá Mua cao nhất được tô màu xanh lá nhạt (#E8F5E9) với chữ xanh đậm (#2E7D32).
-  - Ô có giá Bán thấp nhất được tô màu vàng (#FFEB3B) với chữ xanh ô-liu (#827717).
-  - Cột Chênh lệch tự động đổi màu Đỏ khi tăng giá bán, Xanh lá khi giảm giá bán.
-- **Biểu đồ**: Cột BarChart tự động cập nhật theo ngày được chọn ở Date Picker.
-
-### Sheet "Data"
-| Ngày Cập Nhật | Mã Ngoại Tệ | Tên Ngoại Tệ | Mua Tiền Mặt | Mua Chuyển Khoản | Bán     |
-|---------------|-------------|---------------|--------------|------------------|---------|
-| 2026-06-08    | USD         | US DOLLAR     | 26,097.00    | 26,127.00        | 26,407  |
-
-# Constraints
-- Đảm bảo máy tính bật và có kết nối mạng lúc 18h00.
+# Quy Tắc Bất Biến (Constraints)
 - Đường dẫn cố định dự án: `D:\Tygia-Tudong`
-- Excel File: `D:\Tygia-Tudong\TyGia_Banking.xlsx`
-- Log File: `D:\Tygia-Tudong\vcb_rates.log`
-- Backup folder: `D:\Tygia-Tudong\Backup`
-- `export_pdf.py` cần thư viện `fpdf2` (`pip install fpdf2`). Font DejaVu tự tải lần đầu.
+- Chuỗi thời gian luôn mở rộng động đến `datetime.now()` (Rolling Calendar), không hardcode ngày kết thúc trong quá khứ.
+- Định dạng hiển thị số tiền/tỷ giá bắt buộc tuân theo hệ `,000,000 VND`.
+- Tuyệt đối không sử dụng Playwright/trình duyệt nặng cho tác vụ cào hằng ngày; duy trì giải pháp thuần Python nhanh, nhẹ và ổn định.
