@@ -1,0 +1,72 @@
+name: Automated Banking FX Crawler & Realtime Deploy
+
+on:
+  schedule:
+    # Mon-Fri: 08:30, 11:30, 14:30, 16:30, 23:00 (Vietnam Time = UTC+7)
+    - cron: '30 1 * * 1-5'
+    - cron: '30 4 * * 1-5'
+    - cron: '30 7 * * 1-5'
+    - cron: '30 9 * * 1-5'
+    - cron: '0 16 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  crawl-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas openpyxl urllib3
+
+      - name: Run Cloud Crawler
+        run: |
+          python scripts/crawler_cloud.py
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/rates_history.json docs/latest_live.json docs/index.html index.html TyGia_Banking.xlsx docs/TyGia_Banking.xlsx || true
+          if git diff --staged --quiet; then
+            echo "No changes detected to commit."
+          else
+            git commit -m "chore(auto-crawler): update banking exchange rates and live snapshot"
+            git push origin main
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

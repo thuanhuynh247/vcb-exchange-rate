@@ -27,4 +27,5 @@ temp_current_data.csv
 # JSON Data (Allow docs json)
 *.json
 !docs/rates_history.json
+!docs/latest_live.json
 

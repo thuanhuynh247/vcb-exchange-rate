@@ -130,6 +130,39 @@ Tác vụ `TyGiaBanking_Daily` sẽ được thêm vào hệ thống để chạ
 
 ---
 
+## ⚡ Kiến Trúc Tỷ Giá Realtime & Tự Động Hóa Đám Mây 24/7 (Dual-Engine)
+
+Hệ thống giải quyết triệt để rào cản chính sách bảo mật trình duyệt (**CORS**) của các ngân hàng khi chạy trên máy chủ web tĩnh GitHub Pages thông qua **Kiến Trúc Kép (Dual-Engine Realtime)**:
+
+1. **Engine 1 - Client-Side Live Stream (Trực tiếp trên Trình duyệt)**:
+   - Kết nối trực tiếp cổng **Open API của ACB** (`https://acb.com.vn/api/front/v1/currency?currency=VND`) có chứng thực `Access-Control-Allow-Origin: *`.
+   - Trình duyệt gọi trực tiếp không qua trung gian (Zero Latency), lấy tỷ giá USD Mua TM, Mua CK, Bán theo thời gian thực (giây).
+   - Thanh công cụ **Realtime Banking Live Stream Hub** hiển thị nhịp đập Pulse xanh, đồng hồ đếm giây, nút `⚡ Đồng Bộ Trực Tiếp`, công tắc tự động làm mới 60s và badge nhấp nháy chênh lệch giá so với phiên chốt.
+   - Hỗ trợ 1-click copy tỷ giá realtime vào clipboard với Toast Notification chuẩn tài chính `,000,000 VND`.
+
+2. **Engine 2 - Serverless GitHub Actions Cron Ingestion (Cào tự động trên Đám mây 24/7)**:
+   - Workflow `.github/workflows/auto_crawler.yml` chạy trên máy chủ Linux của GitHub, hoàn toàn không bị hạn chế bởi CORS của trình duyệt.
+   - Lịch chạy tự động theo các phiên giao dịch ngân hàng: `08:30` (Mở phiên), `11:30` (Chốt trưa), `14:30` (Phiên chiều), `16:30` (Chốt phiên), và `23:00` (Tổng kết chốt ngày) từ Thứ 2 đến Thứ 6.
+   - Script không đầu `scripts/crawler_cloud.py` cào tỷ giá từ Vietcombank, ACB, BIDV..., cập nhật `rates_history.json`, `latest_live.json`, và file Excel `TyGia_Banking.xlsx`.
+   - Tự động deploy lên GitHub Pages mà **không cần bật máy tính cá nhân**.
+
+3. **Engine 3 - Tùy chọn Mở rộng Serverless Edge Proxy (Cloudflare Workers)**:
+   - Đối với các ngân hàng khóa CORS (như Vietcombank XML, BIDV), có thể triển khai một Cloudflare Worker miễn phí (100,000 req/ngày) làm CORS Relay theo mẫu:
+     ```javascript
+     export default {
+       async fetch(request) {
+         const url = new URL(request.url).searchParams.get('url');
+         if (!url) return new Response('Missing url', { status: 400 });
+         const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+         const headers = new Headers(resp.headers);
+         headers.set('Access-Control-Allow-Origin', '*');
+         return new Response(resp.body, { status: resp.status, headers });
+       }
+     };
+     ```
+
+---
+
 ## 🛡️ Giấy Phép (License)
 
 Dự án được phân phối dưới giấy phép MIT License.
