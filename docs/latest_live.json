@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-09-11T19:06:42.395393",
-  "date_dd": "11/09/2026",
-  "date_iso": "2026-09-11",
+  "timestamp": "2026-09-14T06:35:31.339527",
+  "date_dd": "14/09/2026",
+  "date_iso": "2026-09-14",
   "banks": {
     "Vietcombank": {
-      "cash": 25700.0,
-      "transfer": 25730.0,
-      "sell": 26110.0
+      "cash": 25720.0,
+      "transfer": 25750.0,
+      "sell": 26130.0
     },
     "VietinBank": {
       "cash": 25666,
@@ -29,9 +29,9 @@
       "sell": 26105
     },
     "ACB": {
-      "cash": 25700.0,
-      "transfer": 25730.0,
-      "sell": 26090.0
+      "cash": 25730.0,
+      "transfer": 25760.0,
+      "sell": 26120.0
     },
     "Sacombank": {
       "cash": 25720,
