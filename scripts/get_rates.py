@@ -208,6 +208,35 @@ def fetch_acb_usd():
         logger.error(f"Lỗi lấy tỷ giá ACB: {e}")
     return {"bank": "ACB", "buy_cash": None, "buy_transfer": None, "sell": None}
 
+def fetch_msb_usd():
+    """Fetch live rates from MSB Production API."""
+    logger.info("Đang lấy tỷ giá MSB...")
+    today_dd = datetime.now().strftime('%d/%m/%Y')
+    url_board = 'https://digibank-api-business.msb.com.vn/api/corp-foreign-exchange/client-api/v1/exchange-rates/public/board-info'
+    url_rates = 'https://digibank-api-business.msb.com.vn/api/corp-foreign-exchange/client-api/v1/exchange-rates/public'
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
+    try:
+        r_b = requests.get(url_board, params={'boardDate': today_dd}, headers=headers, timeout=10, verify=False)
+        if r_b.status_code == 200:
+            boards = r_b.json()
+            if isinstance(boards, list) and len(boards) > 0:
+                latest_b = boards[0]['boardNumber']
+                r_r = requests.get(url_rates, params={'boardDate': today_dd, 'boardNumber': latest_b}, headers=headers, timeout=10, verify=False)
+                if r_r.status_code == 200:
+                    data = r_r.json()
+                    for c in data.get('currencyOverview', []):
+                        if c.get('currencyCode') == 'USD':
+                            edata = c.get('exchangeRatesData', [])
+                            if edata:
+                                buy = _to_float(edata[0].get('buyRateValue'))
+                                sell = _to_float(edata[0].get('sellRateValue'))
+                                if buy and sell:
+                                    return {"bank": "MSB", "buy_cash": buy, "buy_transfer": buy, "sell": sell}
+    except Exception as e:
+        logger.error(f"Lỗi lấy tỷ giá MSB: {e}")
+    return {"bank": "MSB", "buy_cash": None, "buy_transfer": None, "sell": None}
+
+
 def fetch_vietinbank_usd(target_time="17:15:00"):
     """Fetch VietinBank USD rate prioritizing target_time (default 17:15:00), with fallbacks for earlier frames."""
     logger.info(f"Đang lấy tỷ giá VietinBank qua Server Action API (ưu tiên khung giờ {target_time})...")
@@ -771,8 +800,9 @@ def get_multi_bank_rates(vcb_usd_data=None):
     exim = fetch_eximbank_usd()
     hdb = fetch_hdbank_usd()
     ocb = fetch_ocb_usd()
+    msb = fetch_msb_usd()
         
-    res_list = [vcb_res, vtb, bidv, agri, tcb, acb, sacom, tpb, vpb, hdb, exim, ocb, seab, vab, pvcb]
+    res_list = [vcb_res, vtb, bidv, agri, tcb, acb, sacom, tpb, vpb, msb, hdb, exim, ocb, seab, vab, pvcb]
     logger.info(f"Kết quả thu thập: {res_list}")
     return res_list
 
@@ -960,7 +990,7 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws.row_dimensions[2].height = 36
     
     ws.merge_cells('B3:I3')
-    ws['B3'].value = 'Theo dõi, phân tích và so sánh biến động tỷ giá giữa 15 ngân hàng thương mại hàng đầu Việt Nam'
+    ws['B3'].value = 'Theo dõi, phân tích và so sánh biến động tỷ giá giữa 16 ngân hàng thương mại hàng đầu Việt Nam'
     ws['B3'].font = Font(size=10, italic=True, color=SLATE_500, name='Arial')
     ws['B3'].alignment = Alignment(horizontal='left', vertical='center')
     ws.row_dimensions[3].height = 20
@@ -1000,7 +1030,7 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws['F4'].alignment = Alignment(horizontal='left', vertical='center')
     
     ws.merge_cells('H4:I4')
-    ws['H4'].value = '🏛️ Quy mô: 15 Ngân hàng'
+    ws['H4'].value = '🏛️ Quy mô: 16 Ngân hàng'
     ws['H4'].font = Font(size=10, bold=True, color=SLATE_600, name='Arial')
     ws['H4'].alignment = Alignment(horizontal='center', vertical='center')
     ws['H4'].fill = PatternFill(start_color=SLATE_100, end_color=SLATE_100, fill_type='solid')
@@ -1027,9 +1057,9 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws.merge_cells('B6:C6')
     ws['B6'].value = '🏆 BÁN THẤP NHẤT (MUA TỐT)'
     ws.merge_cells('B7:C7')
-    ws['B7'].value = '=MIN(E12:E26)'
+    ws['B7'].value = '=MIN(E12:E27)'
     ws.merge_cells('B8:C8')
-    ws['B8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B26, MATCH(MIN(E12:E26), E12:E26, 0)))'
+    ws['B8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B27, MATCH(MIN(E12:E27), E12:E27, 0)))'
     
     apply_box_style(ws, 'B6', 'C8', fill=PatternFill(start_color=AMBER_100, end_color=AMBER_100, fill_type='solid'),
                     border=Border(left=Side(style='thin', color=AMBER_BORDER), right=Side(style='thin', color=AMBER_BORDER),
@@ -1046,9 +1076,9 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws.merge_cells('D6:E6')
     ws['D6'].value = '💰 MUA TIỀN MẶT CAO NHẤT'
     ws.merge_cells('D7:E7')
-    ws['D7'].value = '=MAX(C12:C26)'
+    ws['D7'].value = '=MAX(C12:C27)'
     ws.merge_cells('D8:E8')
-    ws['D8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B26, MATCH(MAX(C12:C26), C12:C26, 0)))'
+    ws['D8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B27, MATCH(MAX(C12:C27), C12:C27, 0)))'
     
     apply_box_style(ws, 'D6', 'E8', fill=PatternFill(start_color=EMERALD_100, end_color=EMERALD_100, fill_type='solid'),
                     border=Border(left=Side(style='thin', color=EMERALD_BORDER), right=Side(style='thin', color=EMERALD_BORDER),
@@ -1065,9 +1095,9 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws.merge_cells('F6:G6')
     ws['F6'].value = '💳 MUA CHUYỂN KHOẢN CAO NHẤT'
     ws.merge_cells('F7:G7')
-    ws['F7'].value = '=MAX(D12:D26)'
+    ws['F7'].value = '=MAX(D12:D27)'
     ws.merge_cells('F8:G8')
-    ws['F8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B26, MATCH(MAX(D12:D26), D12:D26, 0)))'
+    ws['F8'].value = '=CONCATENATE("Tại: ", INDEX(B12:B27, MATCH(MAX(D12:D27), D12:D27, 0)))'
     
     apply_box_style(ws, 'F6', 'G8', fill=PatternFill(start_color=BLUE_100, end_color=BLUE_100, fill_type='solid'),
                     border=Border(left=Side(style='thin', color=BLUE_BORDER), right=Side(style='thin', color=BLUE_BORDER),
@@ -1081,10 +1111,10 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws['F8'].alignment = Alignment(horizontal='center', vertical='center')
 
     # Card 4 (H6:I8): SPREAD THỊ TRƯỜNG TB
-    ws.merge_cells('H6:I6')
+    ws.merge_cells('H6:I8')
     ws['H6'].value = '📊 SPREAD MUA - BÁN TB'
     ws.merge_cells('H7:I7')
-    ws['H7'].value = '=AVERAGE(F12:F26)'
+    ws['H7'].value = '=AVERAGE(F12:F27)'
     ws.merge_cells('H8:I8')
     ws['H8'].value = 'Chênh lệch trung bình thị trường'
     
@@ -1106,7 +1136,7 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     
     # ── SECTION LABEL (Row 10) ──
     ws.merge_cells('B10:I10')
-    ws['B10'].value = '📋 MA TRẬN SO SÁNH TỶ GIÁ CHI TIẾT 15 NGÂN HÀNG'
+    ws['B10'].value = '📋 MA TRẬN SO SÁNH TỶ GIÁ CHI TIẾT 16 NGÂN HÀNG'
     ws['B10'].font = Font(bold=True, size=11, color=SLATE_800, name='Arial')
     ws['B10'].alignment = Alignment(horizontal='left', vertical='center')
     ws.row_dimensions[10].height = 24
@@ -1126,11 +1156,11 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
         cell.border = border_grid
     ws.row_dimensions[11].height = 32
     
-    # ── 15 BANKS LIST ──
+    # ── 16 BANKS LIST ──
     banks = [
         "Vietcombank", "VietinBank", "BIDV", "Agribank",
         "Techcombank", "ACB", "Sacombank", "TPBank", "VPBank",
-        "HDBank", "Eximbank", "OCB", "SeaBank", "VietABank", "PVcomBank"
+        "MSB", "HDBank", "Eximbank", "OCB", "SeaBank", "VietABank", "PVcomBank"
     ]
     first_data_row = 12
     last_data_row = first_data_row + len(banks) - 1  # 26
@@ -1394,7 +1424,7 @@ def generate_html_dashboard(multi_bank_data, current_date_str, output_path=r'D:\
                 </div>
                 <div>
                     <h1 class="font-bold text-lg leading-tight">EXECUTIVE FINANCIAL DASHBOARD</h1>
-                    <p class="text-xs text-slate-400">Tỷ Giá Ngoại Tệ USD/VND Toàn Thị Trường (15 Ngân Hàng)</p>
+                    <p class="text-xs text-slate-400">Tỷ Giá Ngoại Tệ USD/VND Toàn Thị Trường (16 Ngân Hàng)</p>
                 </div>
             </div>
             <div class="flex items-center gap-3">

@@ -88,6 +88,32 @@ def fetch_acb():
         log(f"WARN: ACB fetch error: {e}")
     return None
 
+def fetch_msb():
+    """Fetch live rates from MSB Production API."""
+    today_dd = datetime.datetime.now().strftime('%d/%m/%Y')
+    url_board = 'https://digibank-api-business.msb.com.vn/api/corp-foreign-exchange/client-api/v1/exchange-rates/public/board-info'
+    url_rates = 'https://digibank-api-business.msb.com.vn/api/corp-foreign-exchange/client-api/v1/exchange-rates/public'
+    try:
+        r_b = requests.get(url_board, params={'boardDate': today_dd}, headers=HEADERS, timeout=8, verify=False)
+        if r_b.status_code == 200:
+            boards = r_b.json()
+            if isinstance(boards, list) and len(boards) > 0:
+                latest_b = boards[0]['boardNumber']
+                r_r = requests.get(url_rates, params={'boardDate': today_dd, 'boardNumber': latest_b}, headers=HEADERS, timeout=8, verify=False)
+                if r_r.status_code == 200:
+                    data = r_r.json()
+                    for c in data.get('currencyOverview', []):
+                        if c.get('currencyCode') == 'USD':
+                            edata = c.get('exchangeRatesData', [])
+                            if edata:
+                                buy = float(str(edata[0].get('buyRateValue', 0)).replace(',', ''))
+                                sell = float(str(edata[0].get('sellRateValue', 0)).replace(',', ''))
+                                if buy > 0 and sell > 0:
+                                    return {'cash': buy, 'transfer': buy, 'sell': sell}
+    except Exception as e:
+        log(f"WARN: MSB fetch error: {e}")
+    return None
+
 def main():
     log("=== BẮT ĐẦU CÀO DỮ LIỆU TỶ GIÁ ĐA NGÂN HÀNG (CLOUD RUNNER) ===")
     
@@ -107,9 +133,11 @@ def main():
     
     vcb = fetch_vietcombank()
     acb = fetch_acb()
+    msb = fetch_msb()
 
     log(f"Kết quả cào VCB: {vcb}")
     log(f"Kết quả cào ACB: {acb}")
+    log(f"Kết quả cào MSB: {msb}")
 
     target_iso = today_iso
     if target_iso not in rates_history:
@@ -126,6 +154,8 @@ def main():
         updated_banks["Vietcombank"] = vcb
     if acb:
         updated_banks["ACB"] = acb
+    if msb:
+        updated_banks["MSB"] = msb
 
     with open(RATES_HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(rates_history, f, ensure_ascii=False, indent=2)
