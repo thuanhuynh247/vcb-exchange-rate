@@ -22503,9 +22503,9 @@
     "date_dd": "24/09/2026",
     "banks": {
       "Vietcombank": {
-        "cash": 25790.0,
-        "transfer": 25820.0,
-        "sell": 26200.0
+        "cash": 25770.0,
+        "transfer": 25800.0,
+        "sell": 26180.0
       },
       "VietinBank": {
         "cash": 25666,
@@ -22528,9 +22528,9 @@
         "sell": 26105
       },
       "ACB": {
-        "cash": 25790.0,
-        "transfer": 25820.0,
-        "sell": 26180.0
+        "cash": 25780.0,
+        "transfer": 25810.0,
+        "sell": 26170.0
       },
       "Sacombank": {
         "cash": 25720,
@@ -22578,9 +22578,9 @@
         "sell": 26120
       },
       "MSB": {
-        "cash": 25784.0,
-        "transfer": 25784.0,
-        "sell": 26205.0
+        "cash": 25812.0,
+        "transfer": 25812.0,
+        "sell": 26183.0
       }
     }
   }
