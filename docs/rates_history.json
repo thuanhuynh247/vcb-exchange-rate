@@ -22583,5 +22583,90 @@
         "sell": 26183.0
       }
     }
+  },
+  "2026-09-25": {
+    "date_dd": "25/09/2026",
+    "banks": {
+      "Vietcombank": {
+        "cash": 25770.0,
+        "transfer": 25800.0,
+        "sell": 26180.0
+      },
+      "VietinBank": {
+        "cash": 25666,
+        "transfer": 25731,
+        "sell": 26111
+      },
+      "BIDV": {
+        "cash": 25740,
+        "transfer": 25740,
+        "sell": 26120
+      },
+      "Agribank": {
+        "cash": 25710,
+        "transfer": 25740,
+        "sell": 26120
+      },
+      "Techcombank": {
+        "cash": 25724,
+        "transfer": 25738,
+        "sell": 26105
+      },
+      "ACB": {
+        "cash": 25780.0,
+        "transfer": 25810.0,
+        "sell": 26170.0
+      },
+      "Sacombank": {
+        "cash": 25720,
+        "transfer": 25720,
+        "sell": 26120
+      },
+      "TPBank": {
+        "cash": 25515,
+        "transfer": 25740,
+        "sell": 26120
+      },
+      "VPBank": {
+        "cash": 26099,
+        "transfer": 26099,
+        "sell": 26379
+      },
+      "HDBank": {
+        "cash": 25700,
+        "transfer": 25730,
+        "sell": 26100
+      },
+      "Eximbank": {
+        "cash": 25700,
+        "transfer": 25730,
+        "sell": 26090
+      },
+      "OCB": {
+        "cash": 25695,
+        "transfer": 25745,
+        "sell": 26130
+      },
+      "SeaBank": {
+        "cash": 25740,
+        "transfer": 25740,
+        "sell": 26120
+      },
+      "VietABank": {
+        "cash": 25700,
+        "transfer": 25750,
+        "sell": 26100
+      },
+      "PVcomBank": {
+        "cash": 25640,
+        "transfer": 25670,
+        "sell": 26120
+      },
+      "MSB": {
+        "cash": 25806.0,
+        "transfer": 25806.0,
+        "sell": 26185.0
+      }
+    }
   }
 }
