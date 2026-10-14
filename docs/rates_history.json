@@ -23693,9 +23693,9 @@
     "date_dd": "14/10/2026",
     "banks": {
       "Vietcombank": {
-        "cash": 25670.0,
-        "transfer": 25700.0,
-        "sell": 26080.0
+        "cash": 25680.0,
+        "transfer": 25710.0,
+        "sell": 26090.0
       },
       "VietinBank": {
         "cash": 25666,
