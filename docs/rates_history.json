@@ -24458,9 +24458,9 @@
     "date_dd": "27/10/2026",
     "banks": {
       "Vietcombank": {
-        "cash": 25630.0,
-        "transfer": 25660.0,
-        "sell": 26040.0
+        "cash": 25610.0,
+        "transfer": 25640.0,
+        "sell": 26020.0
       },
       "VietinBank": {
         "cash": 25666,
@@ -24533,9 +24533,9 @@
         "sell": 26120
       },
       "MSB": {
-        "cash": 25602.0,
-        "transfer": 25602.0,
-        "sell": 26120.0
+        "cash": 25594.0,
+        "transfer": 25594.0,
+        "sell": 26009.0
       }
     }
   }
