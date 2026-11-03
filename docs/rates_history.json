@@ -24883,9 +24883,9 @@
     "date_dd": "03/11/2026",
     "banks": {
       "Vietcombank": {
-        "cash": 25530.0,
-        "transfer": 25560.0,
-        "sell": 25940.0
+        "cash": 25550.0,
+        "transfer": 25580.0,
+        "sell": 25960.0
       },
       "VietinBank": {
         "cash": 25666,
@@ -24908,9 +24908,9 @@
         "sell": 26105
       },
       "ACB": {
-        "cash": 25530.0,
-        "transfer": 25560.0,
-        "sell": 25920.0
+        "cash": 25560.0,
+        "transfer": 25590.0,
+        "sell": 25950.0
       },
       "Sacombank": {
         "cash": 25720,
