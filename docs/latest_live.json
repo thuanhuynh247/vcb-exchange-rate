@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-11-09T08:15:16.570500",
+  "timestamp": "2026-11-09T13:15:34.256286",
   "date_dd": "09/11/2026",
   "date_iso": "2026-11-09",
   "banks": {
     "Vietcombank": {
-      "cash": 25320.0,
-      "transfer": 25350.0,
-      "sell": 25730.0
+      "cash": 25290.0,
+      "transfer": 25320.0,
+      "sell": 25700.0
     },
     "VietinBank": {
       "cash": 25666,
@@ -79,9 +79,9 @@
       "sell": 26120
     },
     "MSB": {
-      "cash": 25300.0,
-      "transfer": 25300.0,
-      "sell": 25730.0
+      "cash": 25334.0,
+      "transfer": 25334.0,
+      "sell": 25689.0
     }
   }
 }
