@@ -37,8 +37,13 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 }
 
+VN_TZ = datetime.timezone(datetime.timedelta(hours=7))
+
+def now_vn():
+    return datetime.datetime.now(VN_TZ)
+
 def log(msg):
-    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+    print(f"[{now_vn().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
 def fetch_vietcombank():
     """Fetch live rates from Vietcombank XML endpoint."""
@@ -60,7 +65,7 @@ def fetch_vietcombank():
 
 def fetch_acb():
     """Fetch live rates from ACB Open API."""
-    now_iso = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000')
+    now_iso = now_vn().strftime('%Y-%m-%dT%H:%M:%S.000')
     url = f"https://acb.com.vn/api/front/v1/currency?currency=VND&effectiveDateTime={now_iso}"
     try:
         r = requests.get(url, headers=HEADERS, timeout=12, verify=False)
@@ -90,7 +95,7 @@ def fetch_acb():
 
 def fetch_msb():
     """Fetch live rates from MSB Production API."""
-    today_dd = datetime.datetime.now().strftime('%d/%m/%Y')
+    today_dd = now_vn().strftime('%d/%m/%Y')
     url_board = 'https://digibank-api-business.msb.com.vn/api/corp-foreign-exchange/client-api/v1/exchange-rates/public/board-info'
     url_rates = 'https://digibank-api-business.msb.com.vn/api/corp-foreign-exchange/client-api/v1/exchange-rates/public'
     try:
@@ -128,8 +133,8 @@ def main():
     latest_iso = date_keys[0]
     log(f"Ngày gần nhất trong lịch sử: {latest_iso} ({len(date_keys)} ngày)")
 
-    today_iso = datetime.datetime.now().strftime('%Y-%m-%d')
-    today_dd = datetime.datetime.now().strftime('%d/%m/%Y')
+    today_iso = now_vn().strftime('%Y-%m-%d')
+    today_dd = now_vn().strftime('%d/%m/%Y')
     
     vcb = fetch_vietcombank()
     acb = fetch_acb()
@@ -162,7 +167,7 @@ def main():
     log(f"Đã lưu {RATES_HISTORY_FILE} ({len(rates_history)} ngày)")
 
     live_snapshot = {
-        "timestamp": datetime.datetime.now().isoformat(),
+        "timestamp": now_vn().strftime('%Y-%m-%dT%H:%M:%S+07:00'),
         "date_dd": today_dd,
         "date_iso": target_iso,
         "banks": updated_banks
@@ -184,31 +189,46 @@ def main():
                 f.write(content)
             log(f"Đã cập nhật dữ liệu mới vào {html_path}")
 
-    # Optional Excel update
+    # Optional Excel update (strict DD/MM/YYYY format & bank name to stay compatible with get_rates.py)
     try:
         import openpyxl
-        if os.path.exists(EXCEL_ROOT) and vcb:
+        import shutil
+        if os.path.exists(EXCEL_ROOT):
             wb = openpyxl.load_workbook(EXCEL_ROOT)
-            ws = wb["Data_TheoDoi_USD"] if "Data_TheoDoi_USD" in wb.sheetnames else wb.active
-            
-            date_exists = False
-            for row in range(2, ws.max_row + 1):
-                val = str(ws.cell(row=row, column=1).value or '')
-                if target_iso in val or today_dd in val:
-                    date_exists = True
-                    break
-            
-            if not date_exists:
-                new_row = ws.max_row + 1
-                ws.cell(row=new_row, column=1, value=today_iso)
-                ws.cell(row=new_row, column=2, value="USD")
-                ws.cell(row=new_row, column=3, value=vcb.get('cash'))
-                ws.cell(row=new_row, column=4, value=vcb.get('transfer'))
-                ws.cell(row=new_row, column=5, value=vcb.get('sell'))
-                wb.save(EXCEL_ROOT)
-                import shutil
-                shutil.copy2(EXCEL_ROOT, EXCEL_DOCS)
-                log("Đã cập nhật file Excel TyGia_Banking.xlsx thành công!")
+            if "Data_TheoDoi_USD" in wb.sheetnames:
+                ws = wb["Data_TheoDoi_USD"]
+                existing_idx = {}
+                for row in range(2, ws.max_row + 1):
+                    d_val = str(ws.cell(row=row, column=1).value or '').strip()
+                    b_val = str(ws.cell(row=row, column=2).value or '').strip()
+                    if d_val and b_val:
+                        existing_idx[(d_val, b_val)] = row
+
+                changed = False
+                for bank_name, rdata in updated_banks.items():
+                    if not isinstance(rdata, dict):
+                        continue
+                    key = (today_dd, bank_name)
+                    if key in existing_idx:
+                        r_i = existing_idx[key]
+                        ws.cell(row=r_i, column=3, value=rdata.get('cash'))
+                        ws.cell(row=r_i, column=4, value=rdata.get('transfer'))
+                        ws.cell(row=r_i, column=5, value=rdata.get('sell'))
+                        changed = True
+                    else:
+                        new_row = ws.max_row + 1
+                        ws.cell(row=new_row, column=1, value=today_dd)
+                        ws.cell(row=new_row, column=2, value=bank_name)
+                        ws.cell(row=new_row, column=3, value=rdata.get('cash'))
+                        ws.cell(row=new_row, column=4, value=rdata.get('transfer'))
+                        ws.cell(row=new_row, column=5, value=rdata.get('sell'))
+                        existing_idx[key] = new_row
+                        changed = True
+
+                if changed:
+                    wb.save(EXCEL_ROOT)
+                    shutil.copy2(EXCEL_ROOT, EXCEL_DOCS)
+                    log("Đã cập nhật file Excel TyGia_Banking.xlsx (chuẩn DD/MM/YYYY) thành công!")
     except Exception as e:
         log(f"Bỏ qua cập nhật Excel: {e}")
 

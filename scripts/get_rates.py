@@ -823,7 +823,19 @@ def _save_multi_bank_data(wb, multi_bank_data, current_date_str):
             buy_transfer = ws_data.cell(r, 4).value
             sell = ws_data.cell(r, 5).value
             if date_val and bank_val:
-                existing_rows.append([str(date_val).strip(), str(bank_val).strip(), buy_cash, buy_transfer, sell])
+                b_str = str(bank_val).strip()
+                if b_str.upper() == 'USD':
+                    continue
+                d_str = str(date_val).strip()
+                if '-' in d_str and len(d_str) >= 10:
+                    try:
+                        d_str = datetime.strptime(d_str[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    except Exception:
+                        pass
+                buy_cash = buy_cash if (buy_cash and buy_cash > 0) else None
+                buy_transfer = buy_transfer if (buy_transfer and buy_transfer > 0) else None
+                sell = sell if (sell and sell > 0) else None
+                existing_rows.append([d_str, b_str, buy_cash, buy_transfer, sell])
                 
     if 'Data' in wb.sheetnames:
         ws_vcb = wb['Data']
@@ -864,8 +876,10 @@ def _save_multi_bank_data(wb, multi_bank_data, current_date_str):
             row_date = current_date_str
         else:
             row_date = today_str
-            
-        existing_rows.append([row_date, item['bank'], item['buy_cash'], item['buy_transfer'], item['sell']])
+        bc = item['buy_cash'] if (item.get('buy_cash') and item['buy_cash'] > 0) else None
+        bt = item['buy_transfer'] if (item.get('buy_transfer') and item['buy_transfer'] > 0) else None
+        sl = item['sell'] if (item.get('sell') and item['sell'] > 0) else None
+        existing_rows.append([row_date, item['bank'], bc, bt, sl])
         
     unique_map = {}
     for r in existing_rows:
@@ -1012,7 +1026,17 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
         for r in range(2, ws_data.max_row + 1):
             d = ws_data.cell(r, 1).value
             if d:
-                unique_dates.append(str(d).strip())
+                d_str = str(d).strip()
+                if '-' in d_str and len(d_str) >= 10:
+                    try:
+                        d_str = datetime.strptime(d_str[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    except Exception:
+                        continue
+                try:
+                    datetime.strptime(d_str, '%d/%m/%Y')
+                    unique_dates.append(d_str)
+                except Exception:
+                    continue
     unique_dates = sorted(list(set(unique_dates)), key=lambda x: datetime.strptime(x, '%d/%m/%Y'), reverse=True)
     
     compare_date_str = current_date_str
@@ -1111,7 +1135,7 @@ def _create_multi_bank_comparison_sheet(wb, current_date_str):
     ws['F8'].alignment = Alignment(horizontal='center', vertical='center')
 
     # Card 4 (H6:I8): SPREAD THỊ TRƯỜNG TB
-    ws.merge_cells('H6:I8')
+    ws.merge_cells('H6:I6')
     ws['H6'].value = '📊 SPREAD MUA - BÁN TB'
     ws.merge_cells('H7:I7')
     ws['H7'].value = '=AVERAGE(F12:F27)'
