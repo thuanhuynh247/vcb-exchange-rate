@@ -90,7 +90,7 @@ class Blocked(RuntimeError):
     """Máy chủ NHNN trả 403: tường lửa đang chặn tạm vì gọi dồn dập."""
 
 
-PACE_S = float(os.environ.get("RADAR_PACE_S", "15"))   # giãn cách giữa 2 lần gọi
+PACE_S = float(os.environ.get("RADAR_PACE_S", "20"))   # giãn cách giữa 2 lần gọi
 _state = {"last": 0.0, "blocked": False, "calls": 0}
 
 
@@ -384,10 +384,43 @@ def run(full=False):
     since = None if full else (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=45))
     results = {}
 
+    max_calls = int(os.environ.get("RADAR_MAX_CALLS", "4"))
+    today = started.date().isoformat()
+
+    def due(key):
+        """Nguồn nào cần gọi ở lượt này. NHNN chỉ cho khoảng 4 lần gọi liền nhau rồi chặn,
+        nên mỗi lượt chỉ gọi những nguồn có khả năng đã có số mới."""
+        if full:
+            return True
+        src = health["sources"].get(key, {})
+        try:
+            ago_h = (started - dt.datetime.fromisoformat(src["kiem_tra"])).total_seconds() / 3600
+        except (KeyError, TypeError, ValueError):
+            return True
+        if src.get("trang_thai") != "ok":
+            return True
+        latest = src.get("ky_moi_nhat") or ""
+        if key in ("central", "reference"):      # công bố trước 9h mỗi ngày làm việc
+            return latest < today or ago_h >= 6
+        if key == "omo":                          # có kết quả sau phiên đấu thầu buổi sáng/trưa
+            return (latest < today and started.hour >= 9) or ago_h >= 6
+        if key == "interbank":                    # công bố trễ 1–2 ngày làm việc
+            return ago_h >= 2
+        return ago_h >= 12                        # cpi, policy
+
     def step(key, fn):
-        t0 = time.time()
         src = health["sources"].setdefault(key, {})
-        src.update({"ten": TITLES[key], "link": LINKS[key], "kiem_tra": started.isoformat(timespec="seconds")})
+        src.update({"ten": TITLES[key], "link": LINKS[key]})
+        if not due(key):
+            results[key] = src.get("trang_thai", "ok")
+            return
+        if _state["calls"] >= max_calls:
+            log(f"…  {key}: để lượt sau (đã dùng {_state['calls']} lần gọi)")
+            results[key] = src.get("trang_thai", "cho")
+            src.setdefault("trang_thai", "cho")
+            return
+        t0 = time.time()
+        src["kiem_tra"] = started.isoformat(timespec="seconds")
         try:
             info = fn()
             src.update({"trang_thai": "ok", "loi": None, "thoi_gian_s": round(time.time() - t0, 1), **info})
@@ -398,7 +431,7 @@ def run(full=False):
         results[key] = src["trang_thai"]
 
     backfill = load("backfill", {})
-    budget = {"pages": int(os.environ.get("RADAR_BACKFILL_PAGES", "5"))}
+    budget = {"pages": 0}
 
     def do_series(key, parser):
         def _():
@@ -450,16 +483,6 @@ def run(full=False):
 
     step("central", do_series("central", parse_central))
     step("reference", do_series("reference", parse_reference))
-    step("interbank", do_series("interbank", parse_interbank))
-
-    def do_policy():
-        rows = parse_policy(fetch_structure(STRUCTURES["policy"]))
-        if not rows:
-            raise RuntimeError("Không có dòng lãi suất điều hành")
-        save("policy", rows)
-        return {"so_ban_ghi": len(rows), "ky_moi_nhat": max(r["ap_dung"] or "" for r in rows)}
-    step("policy", do_policy)
-
     def do_omo():
         rec = parse_omo(get(PAGES["omo"]).text)
         cur = load("omo", [])
@@ -467,6 +490,9 @@ def run(full=False):
         save("omo", rows)
         return {"so_ban_ghi": len(rows), "ky_moi_nhat": rows[-1]["d"], "ky_dau_tien": rows[0]["d"]}
     step("omo", do_omo)
+    step("interbank", do_series("interbank", parse_interbank))
+
+
 
     def do_cpi():
         new = parse_cpi(get(PAGES["cpi"]).text)
@@ -489,7 +515,15 @@ def run(full=False):
         save("cpi", rows)
         return {"so_ban_ghi": len(rows), "ky_moi_nhat": rows[-1]["thang"], "ky_dau_tien": rows[0]["thang"]}
     step("cpi", do_cpi)
+    def do_policy():
+        rows = parse_policy(fetch_structure(STRUCTURES["policy"]))
+        if not rows:
+            raise RuntimeError("Không có dòng lãi suất điều hành")
+        save("policy", rows)
+        return {"so_ban_ghi": len(rows), "ky_moi_nhat": max(r["ap_dung"] or "" for r in rows)}
+    step("policy", do_policy)
 
+    budget["pages"] = max(0, max_calls - _state["calls"])
     try:
         n = do_backfill()
         log(f"Lịch sử: đã tải thêm {n} trang")
