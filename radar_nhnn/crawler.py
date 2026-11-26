@@ -170,7 +170,7 @@ def fields(item):
 def api_page(sid, flt=None, page_size=None):
     """Một trang của API, mới nhất trước. flt là bộ lọc OData của Liferay."""
     # API liên ngân hàng rất chậm (vài phút cho 200 bản ghi) nên lấy trang nhỏ hơn
-    page_size = page_size or {3450260: 60, 3450514: 120}.get(sid, 200)
+    page_size = page_size or {3450260: 150, 3450514: 150}.get(sid, 200)
     params = {"pageSize": page_size, "page": 1, "sort": "datePublished:desc",
               "fields": "id,title,datePublished,contentFields"}
     if flt:
@@ -530,7 +530,7 @@ def run(full=False):
         return {"so_ban_ghi": len(rows), "ky_moi_nhat": max(r["ap_dung"] or "" for r in rows)}
     step("policy", do_policy)
 
-    budget["pages"] = max(0, max_calls - _state["calls"]) + int(os.environ.get("RADAR_BACKFILL_EXTRA", "2"))
+    budget["pages"] = max(0, max_calls - _state["calls"]) + int(os.environ.get("RADAR_BACKFILL_EXTRA", "0"))
     try:
         n = do_backfill()
         log(f"Lịch sử: đã tải thêm {n} trang")
