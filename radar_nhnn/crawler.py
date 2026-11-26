@@ -94,7 +94,7 @@ PACE_S = float(os.environ.get("RADAR_PACE_S", "20"))   # giãn cách giữa 2 l�
 _state = {"last": 0.0, "blocked": False, "calls": 0}
 
 
-def get(url, params=None, tries=3, timeout=90):
+def get(url, params=None, tries=2, timeout=150):
     """GET chậm rãi, có thử lại. Gặp 403 thì dừng hẳn mọi lần gọi còn lại của lượt chạy này,
     vì gọi tiếp chỉ làm lệnh chặn kéo dài."""
     if _state["blocked"]:
@@ -116,9 +116,13 @@ def get(url, params=None, tries=3, timeout=90):
             last = f"HTTP {r.status_code}"
         except requests.RequestException as e:
             _state["last"] = time.time()
-            last = f"{type(e).__name__}: {e}"
+            last = f"{type(e).__name__}: {str(e)[:120]}"
+            _state["timeouts"] = _state.get("timeouts", 0) + 1
+            if _state["timeouts"] >= 3:  # máy chủ treo kết nối: coi như đang bị chặn, dừng lượt này
+                _state["blocked"] = True
+                raise Blocked(f"NHNN không phản hồi ({last}) – để lượt sau")
         log(f"  lỗi {last} – thử lại")
-        time.sleep(10 * (i + 1))
+        time.sleep(15)
     raise RuntimeError(last)
 
 
@@ -163,8 +167,10 @@ def fields(item):
     return flat, groups
 
 
-def api_page(sid, flt=None, page_size=200):
+def api_page(sid, flt=None, page_size=None):
     """Một trang của API, mới nhất trước. flt là bộ lọc OData của Liferay."""
+    # API liên ngân hàng rất chậm (vài phút cho 200 bản ghi) nên lấy trang nhỏ hơn
+    page_size = page_size or {3450260: 60, 3450514: 120}.get(sid, 200)
     params = {"pageSize": page_size, "page": 1, "sort": "datePublished:desc",
               "fields": "id,title,datePublished,contentFields"}
     if flt:
@@ -183,7 +189,7 @@ def zstamp(x):
 def fetch_structure(sid, since=None):
     """Lấy mọi bản ghi đăng từ `since` (dùng cho số liệu nhỏ hoặc lượt tăng dần)."""
     flt = f"datePublished ge {zstamp(since)}" if since else None
-    items, _ = api_page(sid, flt, page_size=200)
+    items, _ = api_page(sid, flt)
     return items
 
 
@@ -381,6 +387,7 @@ def merge_rows(old_list, new_map):
 def run(full=False):
     health = load("health", {"sources": {}})
     started = now_vn()
+    t_run = time.time()
     since = None if full else (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=45))
     results = {}
 
@@ -463,7 +470,7 @@ def run(full=False):
             if health["sources"].get(key, {}).get("trang_thai") != "ok":
                 continue
             rows = load(key, [])
-            while not bf.get("done") and bf.get("oldest_pub") and budget["pages"] > 0:
+            while not bf.get("done") and bf.get("oldest_pub") and budget["pages"] > 0 and time.time() - t_run < 540:
                 old_items, left = api_page(STRUCTURES[key], f"datePublished lt {bf['oldest_pub']}")
                 budget["pages"] -= 1
                 done_pages += 1
@@ -523,7 +530,7 @@ def run(full=False):
         return {"so_ban_ghi": len(rows), "ky_moi_nhat": max(r["ap_dung"] or "" for r in rows)}
     step("policy", do_policy)
 
-    budget["pages"] = max(0, max_calls - _state["calls"])
+    budget["pages"] = max(0, max_calls - _state["calls"]) + int(os.environ.get("RADAR_BACKFILL_EXTRA", "2"))
     try:
         n = do_backfill()
         log(f"Lịch sử: đã tải thêm {n} trang")
