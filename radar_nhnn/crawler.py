@@ -456,7 +456,7 @@ def run(full=False):
 
     def do_backfill():
         """Lùi dần lịch sử theo ngày đăng, vài trang mỗi lượt chạy để không bị tường lửa chặn."""
-        parsers = {"central": parse_central, "reference": parse_reference, "interbank": parse_interbank}
+        parsers = {"interbank": parse_interbank, "reference": parse_reference, "central": parse_central}
         done_pages = 0
         for key, parser in parsers.items():
             bf = backfill.get(key, {})

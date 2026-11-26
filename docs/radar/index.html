@@ -30,7 +30,8 @@ button,.btn{font:inherit;font-size:13px;color:var(--fg);background:var(--panel);
 button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 .brief{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15.5px}
 .brief b{font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px}
+@media (max-width:520px){.k-v{font-size:22px}.card{padding:12px 13px}.grid .k-s{font-size:12px}}
 .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:14px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;box-shadow:var(--shadow)}
 .k-l{font-size:12.5px;color:var(--muted)}
@@ -226,7 +227,7 @@ function lineChart(box, o) {
   // lưới + trục y
   const step = niceStep((y1 - y0) / 5); for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) { add("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css("--grid") }); const t = add("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = o.yfmt(v); }
   // trục x
-  const span = (x1 - x0) / 864e5, nT = Math.max(2, Math.floor((W - m.l - m.r) / 80)); const xf = span > 400 ? MY : DM;
+  const span = (x1 - x0) / 864e5, nT = Math.max(2, Math.floor((W - m.l - m.r) / 80)); const xf = span > 200 ? MY : DM;
   for (let i = 0; i <= nT; i++) { const t = x0 + (x1 - x0) * i / nT; const tx = add("text", { x: X(t), y: H - 6, "text-anchor": i === 0 ? "start" : i === nT ? "end" : "middle" }); tx.textContent = xf(t); }
   (o.refs || []).forEach(r => { if (r.y < y0 || r.y > y1) return; add("line", { x1: m.l, x2: W - m.r, y1: Y(r.y), y2: Y(r.y), stroke: r.color || css("--c5"), "stroke-dasharray": "5 4", "stroke-width": 1.3 }); const t = add("text", { x: W - m.r, y: Y(r.y) - 5, "text-anchor": "end" }); t.textContent = r.label; });
   if (o.band) { const [lo, hi] = o.band; add("rect", { x: m.l, width: W - m.l - m.r, y: Y(hi), height: Math.max(0, Y(lo) - Y(hi)), fill: css("--grid"), opacity: .6 }); }
@@ -295,8 +296,8 @@ async function load() {
   D = { central: central || [], reference: reference || [], interbank: interbank || [], policy: policy || [], omo: omo || [], cpi: cpi || [], health: health || { sources: {} }, bank, live };
   const cmap = {}; D.central.forEach(r => cmap[r.d] = r.v);
   // dải biên độ: ghép từng ngày có giá NHTM với tỷ giá trung tâm cùng ngày (hoặc phiên gần nhất trước đó)
-  const cd = D.central.map(r => r.d); let j = 0; D.band = [];
-  for (const d of Object.keys(bank).sort()) { while (j + 1 < cd.length && cd[j + 1] <= d) j++; if (!cd.length || cd[j] > d) continue; const c = cmap[cd[j]], s = bank[d].sell, ceil = c * 1.05; D.band.push({ d, c, s, ceil, use: (s - c) / (ceil - c) * 100 }); }
+  // chỉ ghép những ngày làm việc có cả tỷ giá trung tâm lẫn giá NHTM (bỏ cuối tuần, ngày nghỉ)
+  D.band = Object.keys(bank).sort().filter(d => cmap[d]).map(d => { const c = cmap[d], s = bank[d].sell, ceil = c * 1.05; return { d, c, s, ceil, use: (s - c) / (ceil - c) * 100 }; });
 }
 
 // ---------------------------------------------------------------- tính chỉ số
@@ -327,7 +328,8 @@ function drawHeader(M) {
   const h = D.health; const srcs = Object.values(h.sources || {});
   $("#updated").textContent = h.lan_chay ? `Kiểm tra nguồn lần cuối ${new Date(h.lan_chay).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })} · tự chạy 30 phút/lần (thứ 2–6, 7:00–17:30)` : "Chưa có lần chạy nào.";
   const ok = srcs.filter(s => s.trang_thai === "ok").length, bad = srcs.length - ok;
-  const stale = srcs.filter(s => s.ky_moi_nhat && /^\d{4}-\d{2}-\d{2}$/.test(s.ky_moi_nhat) && daysBetween(s.ky_moi_nhat, todayVN()) > 7).length;
+  const daily = ["central", "reference", "interbank", "omo"];
+  const stale = daily.filter(k => { const s = h.sources?.[k]; return s?.ky_moi_nhat && daysBetween(s.ky_moi_nhat, todayVN()) > 7; }).length;
   $("#health-pills").replaceChildren(el("span", { class: "pill" }, el("span", { class: "dot ok" }), `${ok}/${srcs.length} nguồn ổn`), ...(bad ? [el("span", { class: "pill" }, el("span", { class: "dot bad" }), `${bad} lỗi`)] : []), ...(stale ? [el("span", { class: "pill" }, el("span", { class: "dot warn" }), `${stale} nguồn chậm cập nhật`)] : []));
 }
 
@@ -452,9 +454,13 @@ function drawQuestions(M) {
 function drawHealth() {
   const h = D.health, order = ["central", "reference", "interbank", "policy", "omo", "cpi"];
   $("#health-sub").textContent = `Lần chạy gần nhất ${h.lan_chay ? new Date(h.lan_chay).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "—"} trên ${h.may_chay === "github-actions" ? "GitHub Actions" : h.may_chay || "—"}. Độ trễ = số ngày từ kỳ số liệu mới nhất đến hôm nay.`;
-  const tb = el("tbody"); order.forEach(k => { const s = h.sources?.[k]; if (!s) return; const lag = s.ky_moi_nhat && /^\d{4}-\d{2}-\d{2}$/.test(s.ky_moi_nhat) ? daysBetween(s.ky_moi_nhat, todayVN()) : null;
-    const st = s.trang_thai === "ok" ? (lag != null && lag > 7 ? ["warn", "Chậm"] : ["ok", "Ổn"]) : ["bad", "Lỗi"];
-    tb.append(el("tr", {}, el("td", {}, el("a", { href: s.link, target: "_blank", rel: "noopener" }, s.ten)), el("td", {}, s.ky_dau_tien ? DMY(s.ky_dau_tien).replace(/^(\d\d\/\d\d\/)/, "$1") + " → " + (s.ky_moi_nhat?.length === 7 ? s.ky_moi_nhat : DMY(s.ky_moi_nhat)) : (s.ky_moi_nhat || "—")), el("td", { class: "n" }, lag == null ? "—" : lag + " ngày"), el("td", { class: "n" }, N(s.so_ban_ghi)), el("td", {}, el("span", { class: "pill" }, el("span", { class: "dot " + st[0] }), st[1]), s.loi ? el("div", { class: "err" }, s.loi) : ""))); });
+  const per = (x) => !x ? "—" : x.length === 7 ? x.slice(5) + "/" + x.slice(0, 4) : DMY(x);
+  const monthEnd = (x) => { const [y, m] = x.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+  const tb = el("tbody"); order.forEach(k => { const s = h.sources?.[k]; if (!s) return;
+    const lag = k === "policy" || !s.ky_moi_nhat ? null : daysBetween(s.ky_moi_nhat.length === 7 ? monthEnd(s.ky_moi_nhat) : s.ky_moi_nhat, todayVN());
+    const limit = k === "cpi" ? 45 : 7;
+    const st = s.trang_thai === "ok" ? (lag != null && lag > limit ? ["warn", "Chậm"] : ["ok", "Ổn"]) : s.trang_thai === "cho" ? ["warn", "Chờ lượt sau"] : ["bad", "Lỗi"];
+    tb.append(el("tr", {}, el("td", {}, el("a", { href: s.link, target: "_blank", rel: "noopener" }, s.ten)), el("td", {}, k === "policy" ? "áp dụng từ " + per(s.ky_moi_nhat) : per(s.ky_dau_tien) + " → " + per(s.ky_moi_nhat), s.lich_su_day_du === false ? el("div", { class: "muted small" }, "đang tải dần lịch sử") : ""), el("td", { class: "n" }, lag == null ? "—" : lag + " ngày"), el("td", { class: "n" }, N(s.so_ban_ghi)), el("td", {}, el("span", { class: "pill" }, el("span", { class: "dot " + st[0] }), st[1]), s.loi ? el("div", { class: "err" }, s.loi) : ""))); });
   $("#health-table").replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Bộ số liệu"), el("th", {}, "Kỳ có trong kho"), el("th", { class: "n" }, "Độ trễ"), el("th", { class: "n" }, "Số bản ghi"), el("th", {}, "Trạng thái"))), tb));
 }
 
