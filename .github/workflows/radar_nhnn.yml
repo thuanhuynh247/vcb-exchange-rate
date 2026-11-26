@@ -1,0 +1,65 @@
+name: Radar NHNN – cào số liệu Ngân hàng Nhà nước
+
+on:
+  schedule:
+    # 30 phút/lần trong giờ hành chính thứ 2–6 (07:00–17:30 giờ Việt Nam)
+    - cron: '0,30 0-10 * * 1-5'
+    # chốt cuối ngày 23:15 (giờ VN) mọi ngày, kể cả cuối tuần
+    - cron: '15 16 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Tải lại toàn bộ lịch sử'
+        type: boolean
+        default: false
+  push:
+    branches: [radar-nhnn]
+    paths:
+      - 'radar_nhnn/**'
+      - '.github/workflows/radar_nhnn.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: radar-nhnn-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cài thư viện
+        run: pip install -r radar_nhnn/requirements.txt
+
+      - name: Cào số liệu NHNN
+        run: |
+          if [ "${{ inputs.full }}" = "true" ]; then
+            python radar_nhnn/crawler.py --full
+          else
+            python radar_nhnn/crawler.py
+          fi
+
+      - name: Lưu dữ liệu nếu có thay đổi
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/radar/data
+          if git diff --staged --quiet; then
+            echo "Không có số liệu mới."
+            exit 0
+          fi
+          git commit -m "chore(radar-nhnn): cập nhật số liệu NHNN $(TZ=Asia/Ho_Chi_Minh date '+%d/%m %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep 5
+          done
+          exit 1
