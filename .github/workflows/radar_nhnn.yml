@@ -52,6 +52,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p docs/radar/data
           git add docs/radar/data
           if git diff --staged --quiet; then
             echo "Không có số liệu mới."

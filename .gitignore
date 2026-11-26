@@ -29,3 +29,9 @@ temp_current_data.csv
 !docs/rates_history.json
 !docs/latest_live.json
 
+
+# Radar NHNN
+!radar_nhnn/requirements.txt
+!radar_nhnn/cpi_seed.json
+!docs/radar/data/
+!docs/radar/data/*.json

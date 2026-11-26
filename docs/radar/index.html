@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar tiền tệ NHNN</title>
+<meta name="description" content="Số liệu Ngân hàng Nhà nước tự cập nhật 30 phút/lần: tỷ giá trung tâm, biên độ, lãi suất liên ngân hàng, OMO, CPI và tác động lên doanh nghiệp.">
+<style>
+:root{--bg:#f6f5f1;--panel:#fff;--fg:#1d1d1b;--muted:#6b6a64;--line:#e4e2da;--grid:#efede6;
+--c1:#2f6fb3;--c2:#c2672c;--c3:#3c8c5a;--c4:#8a5bb0;--c5:#8f8d85;--ok:#2f7d4f;--warn:#b7791f;--bad:#c0392b;
+--chip:#f0eee7;--shadow:0 1px 2px rgba(0,0,0,.04)}
+:root[data-theme=dark]{--bg:#161614;--panel:#1f1f1c;--fg:#ecebe6;--muted:#a3a19a;--line:#33322e;--grid:#2a2926;
+--c1:#6ea8e6;--c2:#e39a62;--c3:#6cc08b;--c4:#b893db;--c5:#77756e;--ok:#5fbf86;--warn:#e0b050;--bad:#ef7365;--chip:#2a2926}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#161614;--panel:#1f1f1c;--fg:#ecebe6;--muted:#a3a19a;--line:#33322e;--grid:#2a2926;
+--c1:#6ea8e6;--c2:#e39a62;--c3:#6cc08b;--c4:#b893db;--c5:#77756e;--ok:#5fbf86;--warn:#e0b050;--bad:#ef7365;--chip:#2a2926}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:16px 14px 48px;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start;justify-content:space-between}
+h1{font:400 26px/1.2 Georgia,"Times New Roman",serif;margin:0}
+h2{font-size:16px;font-weight:600;margin:0 0 2px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:3px 10px;font-size:12.5px;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--c5)}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+button,.btn{font:inherit;font-size:13px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
+button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.brief{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15.5px}
+.brief b{font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;box-shadow:var(--shadow)}
+.k-l{font-size:12.5px;color:var(--muted)}
+.k-v{font:400 27px/1.15 Georgia,"Times New Roman",serif;margin:6px 0 3px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.k-v small{font:12px system-ui,sans-serif;color:var(--muted);margin-left:4px}
+.k-s{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.up{color:var(--bad)}.down{color:var(--ok)}.neu{color:var(--muted)}
+.t-ok{color:var(--ok)}.t-warn{color:var(--warn)}.t-bad{color:var(--bad)}
+.chart{position:relative;min-height:260px}
+.chart svg{display:block;width:100%;overflow:visible}
+.chart text{fill:var(--muted);font-size:11.5px}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.12);border-radius:8px;padding:7px 9px;font-size:12.5px;display:none;z-index:5;white-space:nowrap;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);margin:2px 0 6px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.gauge{position:relative;height:16px;border-radius:8px;background:var(--grid);overflow:hidden;margin:10px 0 4px}
+.gauge span{position:absolute;left:0;top:0;bottom:0;border-radius:8px}
+.scale{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:7px 8px;vertical-align:top}
+td.n,th.n{text-align:right}
+.scroll{overflow-x:auto}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px 12px;margin-bottom:12px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.form input{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;font-variant-numeric:tabular-nums}
+ol.qs{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:10px}
+.tag{display:inline-block;font-size:11.5px;color:var(--muted);background:var(--chip);border-radius:6px;padding:0 6px;margin-right:6px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+details p,details li{font-size:13px;color:var(--muted)}
+a{color:var(--c1)}
+.err{color:var(--bad);font-size:13px}
+.skel{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Radar tiền tệ NHNN</h1>
+    <div class="muted small" id="updated">Đang tải số liệu…</div>
+  </div>
+  <div class="row">
+    <span id="health-pills" class="row"></span>
+    <button id="theme" title="Đổi giao diện sáng/tối">Sáng/Tối</button>
+  </div>
+</header>
+
+<section class="brief" id="brief"><span class="skel">Đang tổng hợp…</span></section>
+
+<section class="grid" id="kpis"></section>
+
+<section class="two">
+  <div class="card">
+    <h2>Áp lực tỷ giá: giá bán USD của ngân hàng dùng bao nhiêu biên độ trên</h2>
+    <p class="sub">0% = bằng tỷ giá trung tâm, 100% = chạm trần (trung tâm × 1,05). Giá bán: trung vị 15 ngân hàng từ bộ cào tỷ giá của anh.</p>
+    <div id="gauge-now"></div>
+    <div class="row" style="margin:10px 0 2px" data-range="band"></div>
+    <div class="chart" id="c-band"></div>
+  </div>
+  <div class="card">
+    <h2>Tỷ giá trung tâm, trần biên độ và giá thị trường</h2>
+    <p class="sub">VND/USD. Giá mua của NHNN (tỷ giá tham khảo Cục QLNH) là mức sàn NHNN sẵn sàng mua vào.</p>
+    <div class="row" style="margin:0 0 2px" data-range="fx"></div>
+    <div class="legend" id="lg-fx"></div>
+    <div class="chart" id="c-fx"></div>
+  </div>
+</section>
+
+<section class="two">
+  <div class="card">
+    <h2>Lãi suất liên ngân hàng so với hành lang điều hành</h2>
+    <p class="sub">%/năm. Đường đứt nét: lãi suất OMO gần nhất và lãi suất tái cấp vốn. Qua đêm cao hơn OMO là thanh khoản đang căng.</p>
+    <div class="row" style="margin:0 0 2px" data-range="ib"></div>
+    <div class="legend" id="lg-ib"></div>
+    <div class="chart" id="c-ib"></div>
+  </div>
+  <div class="card">
+    <h2>Đường cong lãi suất liên ngân hàng</h2>
+    <p class="sub">%/năm theo kỳ hạn. So sánh phiên gần nhất với 1 tuần, 1 tháng trước và đầu năm.</p>
+    <div class="legend" id="lg-curve"></div>
+    <div class="chart" id="c-curve"></div>
+  </div>
+</section>
+
+<section class="two">
+  <div class="card">
+    <h2>Thanh khoản: doanh số giao dịch qua đêm</h2>
+    <p class="sub">Nghìn tỷ đồng mỗi phiên, 60 phiên gần nhất. Doanh số tăng vọt cùng lãi suất tăng = ngân hàng thiếu vốn ngắn hạn.</p>
+    <div class="chart" id="c-vol"></div>
+  </div>
+  <div class="card">
+    <h2>Đấu thầu thị trường mở (OMO)</h2>
+    <p class="sub" id="omo-sub">Kết quả phiên gần nhất.</p>
+    <div class="scroll" id="omo-table"></div>
+    <div class="chart" id="c-omo" style="min-height:0;margin-top:10px"></div>
+  </div>
+</section>
+
+<section class="two">
+  <div class="card">
+    <h2>Lạm phát so với cùng kỳ</h2>
+    <p class="sub">%. Đường đứt nét: mục tiêu 4,5%. Nguồn: tin CPI trên sbv.gov.vn; tháng thiếu số được bù bằng số Cục Thống kê đã đối chiếu.</p>
+    <div class="legend" id="lg-cpi"></div>
+    <div class="chart" id="c-cpi"></div>
+  </div>
+  <div class="card">
+    <h2>Tỷ giá tham khảo tại Cục Quản lý ngoại hối</h2>
+    <p class="sub" id="ref-sub">VND, mua vào – bán ra.</p>
+    <div class="scroll" id="ref-table"></div>
+  </div>
+</section>
+
+<section class="card" id="tac-dong">
+  <h2>Tác động lên doanh nghiệp</h2>
+  <p class="sub">Nhập số dư thật từ Bravo (máy này tự nhớ, không gửi đi đâu). Tỷ giá: lãi/lỗ đánh giá lại một lần. Lãi suất: chi phí lãi vay tăng thêm một năm.</p>
+  <div class="form">
+    <label>Phải thu USD (triệu USD)<input data-k="ar" type="number" step="0.1" value="6"></label>
+    <label>Tiền gửi USD (triệu USD)<input data-k="cash" type="number" step="0.1" value="1"></label>
+    <label>Phải trả USD (triệu USD)<input data-k="ap" type="number" step="0.1" value="4"></label>
+    <label>Vay USD (triệu USD)<input data-k="lusd" type="number" step="0.1" value="2"></label>
+    <label>Vay VND (tỷ đồng)<input data-k="lvnd" type="number" step="10" value="250"></label>
+    <label>Doanh thu năm (tỷ đồng)<input data-k="rev" type="number" step="10" value="900"></label>
+  </div>
+  <div class="scroll" id="impact"></div>
+  <p class="muted small" id="impact-note">Số mặc định là số minh hoạ.</p>
+</section>
+
+<section class="card" id="cau-hoi">
+  <h2>Câu hỏi nên đặt cho Ban điều hành</h2>
+  <p class="sub">Tự bật/tắt theo tín hiệu số liệu. Đây là câu hỏi kiểm soát, không phải khuyến nghị giao dịch.</p>
+  <ol class="qs" id="questions"></ol>
+</section>
+
+<section class="card" id="nguon">
+  <h2>Sức khoẻ nguồn số liệu</h2>
+  <p class="sub" id="health-sub">Mỗi nguồn được kiểm tra 30 phút/lần trong giờ hành chính.</p>
+  <div class="scroll" id="health-table"></div>
+</section>
+
+<details class="card">
+  <summary>Nguồn, cách tính và giới hạn</summary>
+  <ul>
+    <li>Tỷ giá trung tâm, tỷ giá tham khảo, lãi suất liên ngân hàng và lãi suất điều hành lấy từ API dữ liệu mà chính trang biểu đồ của sbv.gov.vn sử dụng (<code>/o/headless-delivery/v1.0/content-structures/…</code>). OMO và CPI đọc từ trang HTML của sbv.gov.vn.</li>
+    <li>Giá bán USD của ngân hàng thương mại lấy từ bộ cào 15 ngân hàng trong cùng kho mã (<code>rates_history.json</code>, <code>latest_live.json</code>), dùng giá trị trung vị để loại số lạ.</li>
+    <li>Vị trí trong biên độ = (giá bán NHTM − trung tâm) ÷ (trần − trung tâm). Trần = trung tâm × 1,05 theo biên độ ±5%.</li>
+    <li>Lãi suất OMO thực = lãi suất trúng thầu OMO kỳ hạn ngắn nhất có giao dịch − CPI so với cùng kỳ tháng gần nhất.</li>
+    <li>Kết quả OMO chỉ có từ ngày bộ cào bắt đầu chạy, vì trang NHNN chỉ hiển thị phiên mới nhất.</li>
+    <li>Tải số liệu gốc: <a href="data/central.json">tỷ giá trung tâm</a> · <a href="data/reference.json">tỷ giá tham khảo</a> · <a href="data/interbank.json">liên ngân hàng</a> · <a href="data/omo.json">OMO</a> · <a href="data/cpi.json">CPI</a> · <a href="data/health.json">tình trạng nguồn</a>.</li>
+  </ul>
+</details>
+
+</div>
+
+<script>
+(() => {
+"use strict";
+// ---------------------------------------------------------------- tiện ích
+const $ = (s, el = document) => el.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k === "style") e.style.cssText = v; else e.setAttribute(k, v); } for (const k of kids) e.append(k instanceof Node ? k : String(k)); return e; };
+const N = (n, d = 0) => (n == null || !isFinite(n)) ? "—" : n.toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d });
+const S = (n, d = 0) => (n == null || !isFinite(n)) ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "±") + N(Math.abs(n), d);
+const T = (iso) => Date.parse(iso + "T00:00:00Z");
+const DMY = (iso) => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "—";
+const DM = (t) => { const d = new Date(t); return String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); };
+const MY = (t) => { const d = new Date(t); return "T" + (d.getUTCMonth() + 1) + "/" + String(d.getUTCFullYear()).slice(2); };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const median = (a) => { const s = a.filter(x => x != null && isFinite(x)).sort((x, y) => x - y); if (!s.length) return null; const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const daysBetween = (a, b) => Math.round((T(b) - T(a)) / 864e5);
+const todayVN = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+async function J(url) { try { const r = await fetch(url + (url.includes("?") ? "&" : "?") + "v=" + Math.floor(Date.now() / 60000), { cache: "no-store" }); if (!r.ok) throw new Error(r.status); return await r.json(); } catch (e) { console.warn("Không tải được", url, e); return null; } }
+const store = { get(k, d) { try { const v = localStorage.getItem("radar-nhnn:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem("radar-nhnn:" + k, JSON.stringify(v)); } catch {} } };
+
+// theme
+const applyTheme = (t) => { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; };
+applyTheme(store.get("theme", null));
+$("#theme").onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const nx = cur === "dark" ? "light" : "dark"; applyTheme(nx); store.set("theme", nx); redraw(); };
+
+// ---------------------------------------------------------------- biểu đồ
+function lineChart(box, o) {
+  box.replaceChildren();
+  const W = Math.max(280, box.clientWidth), H = o.height || 260, m = { t: 12, r: 12, b: 26, l: o.left || 52 };
+  const series = o.series.filter(s => s.pts.length);
+  const all = series.flatMap(s => s.pts);
+  if (!all.length) { box.append(el("div", { class: "muted small" }, o.empty || "Chưa có số liệu.")); return; }
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]).concat((o.refs || []).map(r => r.y));
+  let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x0 === x1) { x0 -= 864e5; x1 += 864e5; }
+  let y0 = o.y0 != null ? o.y0 : Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0) * 0.08 || Math.abs(y1) * 0.01 || 1; if (o.y0 == null) y0 -= pad; y1 += pad;
+  const X = t => m.l + (t - x0) / (x1 - x0) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", o.label || "");
+  const add = (tag, a, parent = svg) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); parent.appendChild(e); return e; };
+  // lưới + trục y
+  const step = niceStep((y1 - y0) / 5); for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) { add("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css("--grid") }); const t = add("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = o.yfmt(v); }
+  // trục x
+  const span = (x1 - x0) / 864e5, nT = Math.max(2, Math.floor((W - m.l - m.r) / 80)); const xf = span > 400 ? MY : DM;
+  for (let i = 0; i <= nT; i++) { const t = x0 + (x1 - x0) * i / nT; const tx = add("text", { x: X(t), y: H - 6, "text-anchor": i === 0 ? "start" : i === nT ? "end" : "middle" }); tx.textContent = xf(t); }
+  (o.refs || []).forEach(r => { if (r.y < y0 || r.y > y1) return; add("line", { x1: m.l, x2: W - m.r, y1: Y(r.y), y2: Y(r.y), stroke: r.color || css("--c5"), "stroke-dasharray": "5 4", "stroke-width": 1.3 }); const t = add("text", { x: W - m.r, y: Y(r.y) - 5, "text-anchor": "end" }); t.textContent = r.label; });
+  if (o.band) { const [lo, hi] = o.band; add("rect", { x: m.l, width: W - m.l - m.r, y: Y(hi), height: Math.max(0, Y(lo) - Y(hi)), fill: css("--grid"), opacity: .6 }); }
+  series.forEach(s => {
+    const gap = (o.gapDays || 12) * 864e5; let d = "";
+    s.pts.forEach((p, i) => { d += (i && p[0] - s.pts[i - 1][0] <= gap ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1); });
+    add("path", { d, fill: "none", stroke: css(s.color), "stroke-width": s.width || 2, "stroke-dasharray": s.dash || "", "stroke-linejoin": "round" });
+    if (s.dots || s.pts.length < 40) s.pts.forEach(p => add("circle", { cx: X(p[0]), cy: Y(p[1]), r: 2.6, fill: css(s.color) }));
+  });
+  const guide = add("line", { y1: m.t, y2: H - m.b, stroke: css("--c5"), "stroke-width": 1, opacity: 0 });
+  const tip = el("div", { class: "tip" }); box.append(svg, tip);
+  const sorted = [...new Set(xs)].sort((a, b) => a - b);
+  svg.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * W / r.width;
+    const t = x0 + (px - m.l) / (W - m.l - m.r) * (x1 - x0); let best = sorted[0]; for (const v of sorted) if (Math.abs(v - t) < Math.abs(best - t)) best = v;
+    guide.setAttribute("x1", X(best)); guide.setAttribute("x2", X(best)); guide.setAttribute("opacity", .5);
+    tip.replaceChildren(el("div", { style: "font-weight:600" }, DMY(new Date(best).toISOString().slice(0, 10))));
+    series.forEach(s => { const p = s.pts.find(q => q[0] === best); if (p) tip.append(el("div", {}, el("span", { style: `color:${css(s.color)}` }, "● "), s.name + ": ", el("b", {}, o.yfmt(p[1]) + (o.unit || "")))); });
+    if (o.extra) { const x = o.extra(best); if (x) tip.append(el("div", { class: "muted" }, x)); }
+    tip.style.display = "block"; const tw = tip.offsetWidth; let lx = X(best) * r.width / W + 12; if (lx + tw > r.width) lx = X(best) * r.width / W - tw - 12; tip.style.left = Math.max(0, lx) + "px"; tip.style.top = "6px";
+  });
+  svg.addEventListener("pointerleave", () => { tip.style.display = "none"; guide.setAttribute("opacity", 0); });
+}
+function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw || 1))); const f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+function catChart(box, o) {
+  box.replaceChildren();
+  const W = Math.max(280, box.clientWidth), H = o.height || 250, m = { t: 12, r: 12, b: 26, l: 40 };
+  const cats = o.cats, ys = o.series.flatMap(s => s.vals.filter(v => v != null));
+  if (!ys.length) { box.append(el("div", { class: "muted small" }, "Chưa có số liệu.")); return; }
+  let y0 = Math.min(0, ...ys), y1 = Math.max(...ys) * 1.08;
+  const X = i => m.l + (i + .5) * (W - m.l - m.r) / cats.length, Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", o.label);
+  const add = (tag, a) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); svg.appendChild(e); return e; };
+  const step = niceStep((y1 - y0) / 5); for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) { add("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css("--grid") }); add("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }).textContent = o.yfmt(v); }
+  cats.forEach((c, i) => add("text", { x: X(i), y: H - 6, "text-anchor": "middle" }).textContent = c);
+  if (o.bars) {
+    const bw = Math.max(2, (W - m.l - m.r) / cats.length * .7);
+    o.series[0].vals.forEach((v, i) => { if (v == null) return; add("rect", { x: X(i) - bw / 2, width: bw, y: Y(Math.max(v, 0)), height: Math.abs(Y(v) - Y(0)), fill: css(o.series[0].colorFn ? o.series[0].colorFn(i) : o.series[0].color), rx: 1.5 }); });
+  } else {
+    o.series.forEach(s => { let d = ""; s.vals.forEach((v, i) => { if (v == null) return; d += (d ? "L" : "M") + X(i) + " " + Y(v); }); add("path", { d, fill: "none", stroke: css(s.color), "stroke-width": s.width || 2, "stroke-dasharray": s.dash || "" }); s.vals.forEach((v, i) => v != null && add("circle", { cx: X(i), cy: Y(v), r: 3, fill: css(s.color) })); });
+  }
+  const tip = el("div", { class: "tip" }); box.append(svg, tip);
+  svg.addEventListener("pointermove", ev => { const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * W / r.width; const i = Math.max(0, Math.min(cats.length - 1, Math.floor((px - m.l) / ((W - m.l - m.r) / cats.length))));
+    tip.replaceChildren(el("div", { style: "font-weight:600" }, o.tipTitle ? o.tipTitle(i) : cats[i])); o.series.forEach(s => s.vals[i] != null && tip.append(el("div", {}, el("span", { style: `color:${css(s.color)}` }, "● "), (s.name ? s.name + ": " : ""), el("b", {}, o.yfmt(s.vals[i]) + (o.unit || "")))));
+    tip.style.display = "block"; const tw = tip.offsetWidth; let lx = X(i) * r.width / W + 12; if (lx + tw > r.width) lx = X(i) * r.width / W - tw - 12; tip.style.left = Math.max(0, lx) + "px"; tip.style.top = "6px"; });
+  svg.addEventListener("pointerleave", () => tip.style.display = "none");
+}
+function legend(box, items) { box.replaceChildren(...items.map(([name, color, dash]) => el("span", {}, el("i", { style: `background:${dash ? "transparent" : css(color)};border-top:${dash ? "2px dashed " + css(color) : "0"}` }), name))); }
+const RANGES = [["1T", 31], ["3T", 92], ["6T", 183], ["Từ đầu năm", "ytd"], ["1 năm", 366], ["3 năm", 1096], ["Tất cả", 0]];
+function rangeButtons(key, def, onChange) {
+  const box = document.querySelector(`[data-range="${key}"]`); let cur = store.get("range-" + key, def);
+  const render = () => box.replaceChildren(...RANGES.map(([lb, v]) => { const b = el("button", { class: String(v) === String(cur) ? "on" : "" }, lb); b.onclick = () => { cur = v; store.set("range-" + key, v); render(); onChange(); }; return b; }));
+  render(); return () => cur;
+}
+const cutoff = (r, lastIso) => { if (r === 0) return -Infinity; if (r === "ytd") return T(lastIso.slice(0, 4) + "-01-01"); return T(lastIso) - r * 864e5; };
+
+// ---------------------------------------------------------------- dữ liệu
+let D = null;
+async function load() {
+  const [central, reference, interbank, policy, omo, cpi, health, hist, live] = await Promise.all(
+    ["data/central.json", "data/reference.json", "data/interbank.json", "data/policy.json", "data/omo.json", "data/cpi.json", "data/health.json", "../rates_history.json", "../latest_live.json"].map(J));
+  // giá bán trung vị NHTM theo ngày
+  const bank = {};
+  if (hist) for (const [d, v] of Object.entries(hist)) { const m = median(Object.values(v.banks || {}).map(b => b.sell)); if (m) bank[d] = { sell: m, n: Object.keys(v.banks || {}).length }; }
+  if (live && live.date_iso) { const m = median(Object.values(live.banks || {}).map(b => b.sell)); if (m) bank[live.date_iso] = { sell: m, n: Object.keys(live.banks || {}).length, at: live.timestamp }; }
+  D = { central: central || [], reference: reference || [], interbank: interbank || [], policy: policy || [], omo: omo || [], cpi: cpi || [], health: health || { sources: {} }, bank, live };
+  const cmap = {}; D.central.forEach(r => cmap[r.d] = r.v);
+  // dải biên độ: ghép từng ngày có giá NHTM với tỷ giá trung tâm cùng ngày (hoặc phiên gần nhất trước đó)
+  const cd = D.central.map(r => r.d); let j = 0; D.band = [];
+  for (const d of Object.keys(bank).sort()) { while (j + 1 < cd.length && cd[j + 1] <= d) j++; if (!cd.length || cd[j] > d) continue; const c = cmap[cd[j]], s = bank[d].sell, ceil = c * 1.05; D.band.push({ d, c, s, ceil, use: (s - c) / (ceil - c) * 100 }); }
+}
+
+// ---------------------------------------------------------------- tính chỉ số
+function metrics() {
+  const c = D.central, last = c.at(-1), prev = c.at(-2);
+  const yStart = last ? c.find(r => r.d >= last.d.slice(0, 4) + "-01-01") : null;
+  const ib = D.interbank, ibl = ib.at(-1), ibp = ib.at(-2);
+  const ib20 = ib.slice(-21, -1).map(r => r.vol?.ON).filter(Boolean);
+  const omo = D.omo.at(-1); let omoRate = null, omoVol = omo ? omo.tong : null;
+  if (omo) { const k = omo.phien.flatMap(p => p.ky_han).filter(k => k.kl > 0 && k.ls > 0).sort((a, b) => a.ngay - b.ngay)[0]; omoRate = k ? k.ls : null; }
+  const refi = D.policy.find(p => /tái cấp vốn/i.test(p.loai)), redis = D.policy.find(p => /tái chiết khấu/i.test(p.loai));
+  const cpiL = [...D.cpi].reverse().find(r => r.yoy != null), cpiAvg = [...D.cpi].reverse().find(r => r.bq != null);
+  const ref = D.reference.at(-1), usd = ref?.fx?.USD;
+  const band = D.band.at(-1), bandFirst = D.band.find(b => last && b.d >= last.d.slice(0, 4) + "-01-01");
+  const bandMax = D.band.filter(b => last && b.d >= last.d.slice(0, 4) + "-01-01").reduce((a, b) => (!a || b.use > a.use ? b : a), null);
+  const policyRate = omoRate ?? refi?.gia_tri;
+  return { last, prev, yStart, ibl, ibp, ib20avg: ib20.length ? ib20.reduce((a, b) => a + b, 0) / ib20.length : null, omo, omoRate, omoVol, refi, redis, cpiL, cpiAvg, ref, usd, band, bandFirst, bandMax,
+    ytd: last && yStart ? (last.v / yStart.v - 1) * 100 : null, dDay: last && prev ? last.v - prev.v : null,
+    spread: ibl && omoRate != null ? ibl.r.ON - omoRate : null, real: policyRate != null && cpiL ? policyRate - cpiL.yoy : null,
+    headroom: band ? (band.ceil - band.s) / band.s * 100 : null };
+}
+
+// ---------------------------------------------------------------- vẽ
+function kpi(label, value, unit, sub, cls) { return el("div", { class: "card" }, el("div", { class: "k-l" }, label), el("div", { class: "k-v " + (cls || "") }, value, unit ? el("small", {}, unit) : ""), el("div", { class: "k-s" }, ...[].concat(sub))); }
+function dirSpan(v, d, unit = "", goodWhenDown = null) { const cls = v == null || v === 0 ? "neu" : goodWhenDown == null ? "neu" : (v < 0) === goodWhenDown ? "down" : "up"; return el("span", { class: cls }, S(v, d) + unit); }
+
+function drawHeader(M) {
+  const h = D.health; const srcs = Object.values(h.sources || {});
+  $("#updated").textContent = h.lan_chay ? `Kiểm tra nguồn lần cuối ${new Date(h.lan_chay).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })} · tự chạy 30 phút/lần (thứ 2–6, 7:00–17:30)` : "Chưa có lần chạy nào.";
+  const ok = srcs.filter(s => s.trang_thai === "ok").length, bad = srcs.length - ok;
+  const stale = srcs.filter(s => s.ky_moi_nhat && /^\d{4}-\d{2}-\d{2}$/.test(s.ky_moi_nhat) && daysBetween(s.ky_moi_nhat, todayVN()) > 7).length;
+  $("#health-pills").replaceChildren(el("span", { class: "pill" }, el("span", { class: "dot ok" }), `${ok}/${srcs.length} nguồn ổn`), ...(bad ? [el("span", { class: "pill" }, el("span", { class: "dot bad" }), `${bad} lỗi`)] : []), ...(stale ? [el("span", { class: "pill" }, el("span", { class: "dot warn" }), `${stale} nguồn chậm cập nhật`)] : []));
+}
+
+function drawBrief(M) {
+  const b = $("#brief"); const parts = [];
+  if (M.last) parts.push(el("span", {}, "Tỷ giá trung tâm ngày ", el("b", {}, DMY(M.last.d)), " là ", el("b", {}, N(M.last.v) + " đ"), " (", S(M.dDay), " đ so với phiên trước, ", S(M.ytd, 2), "% từ đầu năm). "));
+  if (M.band) { const lvl = M.band.use >= 80 ? "sát trần, áp lực mua USD lớn" : M.band.use >= 50 ? "ở nửa trên biên độ, áp lực đáng chú ý" : M.band.use >= 0 ? "ở nửa dưới biên độ, áp lực thấp" : "thấp hơn cả tỷ giá trung tâm, thị trường dư USD";
+    parts.push(el("span", {}, "Giá bán USD trung vị của ngân hàng ", el("b", {}, N(M.band.s) + " đ"), " mới dùng ", el("b", {}, N(M.band.use, 0) + "%"), " biên độ trên, ", lvl, M.bandMax ? ` (đỉnh năm nay ${N(M.bandMax.use, 0)}% ngày ${DMY(M.bandMax.d)}). ` : ". ")); }
+  if (M.ibl) { const w = M.spread == null ? "" : M.spread > 0.5 ? "cao hơn rõ OMO, thanh khoản đang căng" : M.spread > 0 ? "nhỉnh hơn OMO, thanh khoản cân bằng" : "thấp hơn OMO, thanh khoản dồi dào";
+    parts.push(el("span", {}, "Lãi suất qua đêm phiên ", DMY(M.ibl.d), " là ", el("b", {}, N(M.ibl.r.ON, 2) + "%"), w ? `, ${w}. ` : ". ")); }
+  if (M.real != null) parts.push(el("span", {}, "Lãi suất điều hành trừ lạm phát: ", el("b", { class: M.real < 0 ? "t-warn" : "" }, S(M.real, 2) + " điểm %"), M.real < 0 ? ", dư địa hạ lãi suất hẹp." : "."));
+  b.replaceChildren(...(parts.length ? parts : [el("span", { class: "err" }, "Chưa có số liệu. Bộ cào chưa chạy lần nào hoặc không tải được dữ liệu.")]));
+}
+
+function drawKpis(M) {
+  const k = [];
+  if (M.last) k.push(kpi("Tỷ giá trung tâm", N(M.last.v), "VND/USD", [dirSpan(M.dDay, 0, " đ"), ` so với phiên trước · ngày ${DMY(M.last.d)}`]));
+  if (M.ytd != null) k.push(kpi("Tỷ giá trung tâm từ đầu năm", S(M.ytd, 2) + "%", "", [`từ ${N(M.yStart.v)} đ ngày ${DMY(M.yStart.d)}`]));
+  if (M.band) k.push(kpi("Giá bán USD tại NHTM (trung vị)", N(M.band.s), "VND", [`dùng ${N(M.band.use, 0)}% biên độ trên · còn ${N(M.headroom, 1)}% đến trần ${N(M.band.ceil)}`], M.band.use >= 80 ? "t-bad" : M.band.use >= 50 ? "t-warn" : ""));
+  if (M.usd) k.push(kpi("NHNN mua / bán USD (Cục QLNH)", N(M.usd[0]), "/ " + N(M.usd[1]), [`tỷ giá tham khảo ngày ${DMY(M.ref.d)}`]));
+  if (M.ibl) k.push(kpi("Lãi suất liên ngân hàng qua đêm", N(M.ibl.r.ON, 2), "%/năm", [dirSpan(M.ibp ? M.ibl.r.ON - M.ibp.r.ON : null, 2, " điểm"), ` · phiên ${DMY(M.ibl.d)}`]));
+  if (M.omo) k.push(kpi("OMO phiên gần nhất", M.omoRate != null ? N(M.omoRate, 2) : "—", "%/năm", [`${N(M.omoVol, 0)} tỷ đ trúng thầu · ngày ${DMY(M.omo.d)}`]));
+  if (M.ibl?.vol?.ON) k.push(kpi("Doanh số qua đêm", N(M.ibl.vol.ON / 1000, 0), "nghìn tỷ đ", [M.ib20avg ? `${S((M.ibl.vol.ON / M.ib20avg - 1) * 100, 0)}% so với TB 20 phiên` : ""]));
+  if (M.refi) k.push(kpi("Tái cấp vốn / tái chiết khấu", N(M.refi.gia_tri, 1) + "%", M.redis ? "/ " + N(M.redis.gia_tri, 1) + "%" : "", [`áp dụng từ ${DMY(M.refi.ap_dung)}`]));
+  if (M.cpiL) k.push(kpi("CPI so với cùng kỳ", N(M.cpiL.yoy, 2), "%", [`tháng ${M.cpiL.thang.slice(5)}/${M.cpiL.thang.slice(0, 4)}`, M.cpiAvg ? ` · bình quân ${N(M.cpiAvg.bq, 2)}%` : ""]));
+  if (M.real != null) k.push(kpi("Lãi suất điều hành thực", S(M.real, 2), "điểm %", ["OMO (hoặc tái cấp vốn) trừ CPI"], M.real < 0 ? "t-warn" : "t-ok"));
+  $("#kpis").replaceChildren(...k);
+}
+
+let rBand, rFx, rIb;
+function drawBand(M) {
+  const g = $("#gauge-now");
+  if (!M.band) { g.replaceChildren(el("div", { class: "muted small" }, "Chưa ghép được giá NHTM với tỷ giá trung tâm.")); }
+  else { const v = Math.max(0, Math.min(100, M.band.use)); g.replaceChildren(el("div", { class: "row" }, el("b", { style: "font-size:22px;font-family:Georgia,serif;font-weight:400" }, N(M.band.use, 1) + "%"), el("span", { class: "muted small" }, `ngày ${DMY(M.band.d)} · NHTM bán ${N(M.band.s)} · trung tâm ${N(M.band.c)} · trần ${N(M.band.ceil)}`)),
+    el("div", { class: "gauge" }, el("span", { style: `width:${v}%;background:${css(v >= 80 ? "--bad" : v >= 50 ? "--warn" : "--c1")}` })), el("div", { class: "scale" }, el("span", {}, "Trung tâm"), el("span", {}, "50%"), el("span", {}, "Trần +5%"))); }
+  const lastD = D.band.at(-1)?.d; if (!lastD) { $("#c-band").replaceChildren(); return; }
+  const from = cutoff(rBand(), lastD);
+  lineChart($("#c-band"), { label: "Vị trí giá bán USD trong biên độ", series: [{ name: "Đã dùng", color: "--c1", pts: D.band.filter(b => T(b.d) >= from).map(b => [T(b.d), b.use]) }], refs: [{ y: 100, label: "Trần", color: css("--bad") }, { y: 50, label: "50%" }], yfmt: v => N(v, 0) + "%", y0: Math.min(0, ...D.band.map(b => b.use)), left: 44,
+    extra: t => { const b = D.band.find(x => T(x.d) === t); return b ? `NHTM ${N(b.s)} · TT ${N(b.c)} · trần ${N(b.ceil)}` : ""; } });
+}
+function drawFx(M) {
+  const lastD = M.last?.d; if (!lastD) return; const from = cutoff(rFx(), lastD);
+  const c = D.central.filter(r => T(r.d) >= from);
+  const series = [
+    { name: "Trần (TT × 1,05)", color: "--c5", dash: "5 4", width: 1.5, pts: c.map(r => [T(r.d), r.v * 1.05]) },
+    { name: "Giá bán NHTM (trung vị)", color: "--c2", pts: Object.keys(D.bank).sort().filter(d => T(d) >= from).map(d => [T(d), D.bank[d].sell]) },
+    { name: "Tỷ giá trung tâm", color: "--c1", pts: c.map(r => [T(r.d), r.v]) },
+    { name: "NHNN mua vào (Cục QLNH)", color: "--c3", width: 1.5, pts: D.reference.filter(r => T(r.d) >= from && r.fx?.USD).map(r => [T(r.d), r.fx.USD[0]]) },
+  ];
+  legend($("#lg-fx"), series.map(s => [s.name, s.color, !!s.dash]));
+  lineChart($("#c-fx"), { label: "Tỷ giá trung tâm, trần và giá NHTM", series, yfmt: v => N(v, 0), left: 56 });
+}
+function drawIb(M) {
+  const lastD = M.ibl?.d; if (!lastD) return; const from = cutoff(rIb(), lastD);
+  const rows = D.interbank.filter(r => T(r.d) >= from);
+  const series = [{ name: "Qua đêm", color: "--c1", pts: rows.filter(r => r.r.ON != null).map(r => [T(r.d), r.r.ON]) },
+    { name: "1 tuần", color: "--c2", width: 1.5, pts: rows.filter(r => r.r["1W"] != null).map(r => [T(r.d), r.r["1W"]]) },
+    { name: "1 tháng", color: "--c4", width: 1.5, pts: rows.filter(r => r.r["1M"] != null).map(r => [T(r.d), r.r["1M"]]) }];
+  const refs = []; if (M.omoRate != null) refs.push({ y: M.omoRate, label: "OMO " + N(M.omoRate, 2) + "%", color: css("--c3") }); if (M.refi) refs.push({ y: M.refi.gia_tri, label: "Tái cấp vốn " + N(M.refi.gia_tri, 1) + "%" });
+  legend($("#lg-ib"), series.map(s => [s.name, s.color]).concat(refs.length ? [["Hành lang điều hành", "--c5", true]] : []));
+  lineChart($("#c-ib"), { label: "Lãi suất liên ngân hàng", series, refs, yfmt: v => N(v, 1), unit: "%", y0: 0, left: 40, gapDays: 6 });
+}
+function drawCurve(M) {
+  const tenors = ["ON", "1W", "2W", "1M", "3M", "6M", "9M"], lbl = ["Qua đêm", "1T", "2T", "1Th", "3Th", "6Th", "9Th"];
+  const ib = D.interbank; if (!ib.length) return; const last = ib.at(-1);
+  const near = (days) => { const t = T(last.d) - days * 864e5; return [...ib].reverse().find(r => T(r.d) <= t); };
+  const ys = ib.find(r => r.d >= last.d.slice(0, 4) + "-01-01");
+  const pick = [[last, "--c1", "Phiên " + DMY(last.d)], [near(7), "--c2", "1 tuần trước"], [near(30), "--c4", "1 tháng trước"], [ys, "--c5", "Đầu năm"]].filter(p => p[0]);
+  const series = pick.map(([r, color, name], i) => ({ name: name + (i ? " (" + DMY(r.d) + ")" : ""), color, dash: i === 3 ? "5 4" : "", width: i ? 1.5 : 2.5, vals: tenors.map(t => r.r[t] ?? null) }));
+  legend($("#lg-curve"), series.map(s => [s.name, s.color, !!s.dash]));
+  catChart($("#c-curve"), { label: "Đường cong lãi suất liên ngân hàng", cats: lbl, series, yfmt: v => N(v, 1), unit: "%" });
+}
+function drawVol() {
+  const rows = D.interbank.slice(-60); if (!rows.length) return;
+  const vals = rows.map(r => r.vol?.ON ? r.vol.ON / 1000 : null); const avg = vals.filter(Boolean).reduce((a, b) => a + b, 0) / vals.filter(Boolean).length;
+  catChart($("#c-vol"), { label: "Doanh số qua đêm 60 phiên", bars: true, cats: rows.map((r, i) => i % Math.ceil(rows.length / 6) === 0 ? DMY(r.d).slice(0, 5) : ""), tipTitle: i => DMY(rows[i].d) + ` · LS qua đêm ${N(rows[i].r.ON, 2)}%`, series: [{ color: "--c1", colorFn: i => vals[i] > avg * 1.3 ? "--c2" : "--c1", vals }], yfmt: v => N(v, 0), unit: " nghìn tỷ", height: 230 });
+}
+function drawOmo(M) {
+  const o = M.omo; if (!o) { $("#omo-table").replaceChildren(el("div", { class: "muted small" }, "Chưa có phiên nào.")); return; }
+  $("#omo-sub").textContent = `Phiên ngày ${DMY(o.d)} · tổng trúng thầu ${N(o.tong, 2)} tỷ đồng. Bộ cào lưu lại mỗi phiên để dựng lịch sử (đang có ${D.omo.length} phiên).`;
+  const tb = el("tbody"); o.phien.forEach(p => { tb.append(el("tr", {}, el("td", { colspan: 4, style: "font-weight:600" }, `${p.loai}${o.phien.length > 1 ? " · lượt " + p.phien : ""}`))); p.ky_han.forEach(k => tb.append(el("tr", {}, el("td", {}, k.ngay + " ngày"), el("td", { class: "n" }, `${N(k.trung_thau)}/${N(k.tham_gia)}`), el("td", { class: "n" }, N(k.kl, 2)), el("td", { class: "n" }, k.ls ? N(k.ls, 2) + "%" : "—")))); tb.append(el("tr", {}, el("td", { class: "muted" }, "Tổng"), el("td"), el("td", { class: "n", style: "font-weight:600" }, N(p.tong, 2)), el("td"))); });
+  $("#omo-table").replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Kỳ hạn"), el("th", { class: "n" }, "Trúng/tham gia"), el("th", { class: "n" }, "Khối lượng (tỷ đ)"), el("th", { class: "n" }, "Lãi suất"))), tb));
+  if (D.omo.length >= 3) lineChart($("#c-omo"), { label: "Khối lượng OMO theo phiên", height: 170, series: [{ name: "Trúng thầu", color: "--c3", pts: D.omo.map(r => [T(r.d), r.tong]) }], yfmt: v => N(v, 0), unit: " tỷ", y0: 0, left: 52, gapDays: 6 });
+}
+function drawCpi() {
+  const rows = D.cpi.filter(r => r.yoy != null || r.co_ban_yoy != null); if (!rows.length) return;
+  const P = r => Date.parse(r.thang + "-15T00:00:00Z");
+  const series = [{ name: "CPI", color: "--c1", pts: rows.filter(r => r.yoy != null).map(r => [P(r), r.yoy]), dots: true }, { name: "Lạm phát cơ bản", color: "--c2", pts: rows.filter(r => r.co_ban_yoy != null).map(r => [P(r), r.co_ban_yoy]), dots: true }];
+  legend($("#lg-cpi"), series.map(s => [s.name, s.color]).concat([["Mục tiêu 4,5%", "--c5", true]]));
+  lineChart($("#c-cpi"), { label: "CPI so với cùng kỳ", series, refs: [{ y: 4.5, label: "Mục tiêu 4,5%" }], yfmt: v => N(v, 1), unit: "%", y0: 0, left: 36, gapDays: 40 });
+}
+function drawRef() {
+  const r = D.reference.at(-1), p = D.reference.at(-2); if (!r) return;
+  $("#ref-sub").textContent = `Áp dụng ngày ${DMY(r.d)}. Chênh lệch so với ngày ${p ? DMY(p.d) : "trước"}.`;
+  const names = { USD: "Đô la Mỹ", EUR: "Euro", JPY: "Yên Nhật", GBP: "Bảng Anh", CHF: "Franc Thuỵ Sĩ", AUD: "Đô la Úc", CAD: "Đô la Canada" };
+  const tb = el("tbody"); Object.entries(r.fx).forEach(([c, [mua, ban]]) => { const pb = p?.fx?.[c]?.[1]; tb.append(el("tr", {}, el("td", {}, el("b", {}, c), " ", el("span", { class: "muted" }, names[c] || "")), el("td", { class: "n" }, N(mua, c === "JPY" ? 2 : 0)), el("td", { class: "n" }, N(ban, c === "JPY" ? 2 : 0)), el("td", { class: "n" }, pb ? dirSpan(ban - pb, c === "JPY" ? 2 : 0) : "—"))); });
+  $("#ref-table").replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Ngoại tệ"), el("th", { class: "n" }, "Mua"), el("th", { class: "n" }, "Bán"), el("th", { class: "n" }, "± bán"))), tb));
+}
+function drawImpact(M) {
+  const v = {}; document.querySelectorAll("#tac-dong input").forEach(i => { v[i.dataset.k] = parseFloat(i.value) || 0; });
+  const rate = M.last?.v || 0, perMio = rate / 1000, net = v.ar + v.cash - v.ap - v.lusd;
+  const sc = [["VND tăng giá 1%", -1, "fx"], ["USD tăng 1%", 1, "fx"], ["USD tăng bằng mức từ đầu năm", M.ytd, "fx"], ["Giá bán USD lên chạm trần biên độ", M.headroom, "fx"], ["Lãi suất vay VND +1 điểm %", 1, "ir"], ["Lãi suất vay VND +2 điểm %", 2, "ir"]];
+  const tb = el("tbody", {}, el("tr", {}, el("td", { colspan: 4 }, `Trạng thái USD ròng ${S(net, 2)} triệu USD (${net >= 0 ? "USD lên thì có lãi tỷ giá" : "USD lên thì lỗ tỷ giá"}), tương đương ${N(Math.abs(net) * perMio, 1)} tỷ đ theo tỷ giá trung tâm ${N(rate)}.`)));
+  sc.forEach(([k, d, kind]) => { const imp = d == null ? null : kind === "fx" ? net * perMio * d / 100 : -v.lvnd * d / 100; const cls = imp == null ? "" : imp < 0 ? "t-bad" : "t-ok";
+    tb.append(el("tr", {}, el("td", {}, k), el("td", { class: "n" }, d == null ? "—" : S(d, 2) + (kind === "fx" ? "%" : " điểm")), el("td", { class: "n " + cls }, imp == null ? "—" : S(imp, 2)), el("td", { class: "n " + cls }, imp == null || !v.rev ? "—" : S(imp / v.rev * 100, 2) + "%"))); });
+  $("#impact").replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Kịch bản"), el("th", { class: "n" }, "Biến động"), el("th", { class: "n" }, "Tác động (tỷ đ)"), el("th", { class: "n" }, "% doanh thu"))), tb));
+  $("#impact-note").textContent = store.get("impact", null) ? "Đang dùng số anh đã nhập trên máy này." : "Số mặc định là số minh hoạ, chưa phải số liệu của công ty.";
+}
+function drawQuestions(M) {
+  const q = [];
+  const lagDays = (k) => { const s = D.health.sources?.[k]; return s?.ky_moi_nhat && /^\d{4}-\d{2}-\d{2}$/.test(s.ky_moi_nhat) ? daysBetween(s.ky_moi_nhat, todayVN()) : null; };
+  if (M.band && M.band.use < 35) q.push(["Tỷ giá", `Giá USD đang cách trần ${N(M.headroom, 1)}%, NHNN mua vào ở ${N(M.usd?.[0])} đ. Công ty đang tận dụng giai đoạn này để thanh toán bông nhập khẩu, trả nợ vay USD sớm hay vẫn để trạng thái mở? Ai phê duyệt?`]);
+  if (M.band && M.band.use >= 70) q.push(["Tỷ giá", `Giá USD đã dùng ${N(M.band.use, 0)}% biên độ trên. Kế hoạch phòng ngừa (kỳ hạn, hoán đổi) cho các khoản phải trả USD 3–6 tháng tới là gì và đã được duyệt chưa?`]);
+  if (M.spread != null && M.spread > 0.5) q.push(["Thanh khoản", "Lãi suất qua đêm cao hơn OMO rõ rệt. Hạn mức tín dụng và lãi suất vay ngắn hạn cho mùa cao điểm cuối năm, Tết đã được chốt bằng văn bản với ngân hàng chưa?"]);
+  if (M.spread != null && M.spread <= 0.5) q.push(["Thanh khoản", "Thanh khoản hệ thống không căng. Ban điều hành đã đề nghị ngân hàng giảm lãi suất các khoản vay hiện hữu chưa, kết quả thế nào?"]);
+  if (M.ibl?.vol?.ON && M.ib20avg && M.ibl.vol.ON > M.ib20avg * 1.3) q.push(["Thanh khoản", `Doanh số qua đêm cao hơn ${N((M.ibl.vol.ON / M.ib20avg - 1) * 100, 0)}% so với trung bình 20 phiên. Ngân hàng giao dịch có báo trước khả năng siết giải ngân không?`]);
+  if (M.real != null && M.real < 0) q.push(["Lãi suất", "Lãi suất điều hành đang thấp hơn lạm phát, dư địa NHNN hạ tiếp là hẹp. Kế hoạch tài chính năm tới có đang giả định chi phí vay giảm không? Nếu lãi suất tăng 2 điểm % thì lợi nhuận còn bao nhiêu?"]);
+  if (M.cpiAvg && M.cpiAvg.bq > 4.5) q.push(["Chi phí", `CPI bình quân ${N(M.cpiAvg.bq, 2)}% đã vượt mục tiêu 4,5%. Kế hoạch năm tới dự phòng bao nhiêu cho tăng lương, điện và vận chuyển?`]);
+  const lagIb = lagDays("interbank"); if (lagIb != null && lagIb > 5) q.push(["Dữ liệu", `Số liệu liên ngân hàng của NHNN đang trễ ${lagIb} ngày. Quyết định vốn ngắn hạn đang dựa vào nguồn nào khác?`]);
+  $("#questions").replaceChildren(...q.map(([t, s]) => el("li", {}, el("span", { class: "tag" }, t), s)));
+}
+function drawHealth() {
+  const h = D.health, order = ["central", "reference", "interbank", "policy", "omo", "cpi"];
+  $("#health-sub").textContent = `Lần chạy gần nhất ${h.lan_chay ? new Date(h.lan_chay).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "—"} trên ${h.may_chay === "github-actions" ? "GitHub Actions" : h.may_chay || "—"}. Độ trễ = số ngày từ kỳ số liệu mới nhất đến hôm nay.`;
+  const tb = el("tbody"); order.forEach(k => { const s = h.sources?.[k]; if (!s) return; const lag = s.ky_moi_nhat && /^\d{4}-\d{2}-\d{2}$/.test(s.ky_moi_nhat) ? daysBetween(s.ky_moi_nhat, todayVN()) : null;
+    const st = s.trang_thai === "ok" ? (lag != null && lag > 7 ? ["warn", "Chậm"] : ["ok", "Ổn"]) : ["bad", "Lỗi"];
+    tb.append(el("tr", {}, el("td", {}, el("a", { href: s.link, target: "_blank", rel: "noopener" }, s.ten)), el("td", {}, s.ky_dau_tien ? DMY(s.ky_dau_tien).replace(/^(\d\d\/\d\d\/)/, "$1") + " → " + (s.ky_moi_nhat?.length === 7 ? s.ky_moi_nhat : DMY(s.ky_moi_nhat)) : (s.ky_moi_nhat || "—")), el("td", { class: "n" }, lag == null ? "—" : lag + " ngày"), el("td", { class: "n" }, N(s.so_ban_ghi)), el("td", {}, el("span", { class: "pill" }, el("span", { class: "dot " + st[0] }), st[1]), s.loi ? el("div", { class: "err" }, s.loi) : ""))); });
+  $("#health-table").replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Bộ số liệu"), el("th", {}, "Kỳ có trong kho"), el("th", { class: "n" }, "Độ trễ"), el("th", { class: "n" }, "Số bản ghi"), el("th", {}, "Trạng thái"))), tb));
+}
+
+let M = null;
+function redraw() { if (!D) return; M = metrics(); drawHeader(M); drawBrief(M); drawKpis(M); drawBand(M); drawFx(M); drawIb(M); drawCurve(M); drawVol(); drawOmo(M); drawCpi(); drawRef(); drawImpact(M); drawQuestions(M); drawHealth(); }
+
+// lưu số dư người dùng nhập
+const saved = store.get("impact", null); document.querySelectorAll("#tac-dong input").forEach(i => { if (saved && saved[i.dataset.k] != null) i.value = saved[i.dataset.k]; i.addEventListener("input", () => { const v = {}; document.querySelectorAll("#tac-dong input").forEach(x => v[x.dataset.k] = parseFloat(x.value) || 0); store.set("impact", v); drawImpact(M); }); });
+rBand = rangeButtons("band", "ytd", () => drawBand(M)); rFx = rangeButtons("fx", "ytd", () => drawFx(M)); rIb = rangeButtons("ib", 183, () => drawIb(M));
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(redraw, 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", redraw);
+load().then(redraw);
+setInterval(() => load().then(redraw), 10 * 60 * 1000); // tự làm mới 10 phút/lần khi để mở
+})();
+</script>
+</body>
+</html>
