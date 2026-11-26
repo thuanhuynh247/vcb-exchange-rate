@@ -86,20 +86,39 @@ def log(msg):
     print(f"[{now_vn():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
 
 
-def get(url, params=None, tries=4, timeout=90):
-    """GET có thử lại: web NHNN hay chậm và lỗi lặt vặt."""
+class Blocked(RuntimeError):
+    """Máy chủ NHNN trả 403: tường lửa đang chặn tạm vì gọi dồn dập."""
+
+
+PACE_S = float(os.environ.get("RADAR_PACE_S", "15"))   # giãn cách giữa 2 lần gọi
+_state = {"last": 0.0, "blocked": False, "calls": 0}
+
+
+def get(url, params=None, tries=3, timeout=90):
+    """GET chậm rãi, có thử lại. Gặp 403 thì dừng hẳn mọi lần gọi còn lại của lượt chạy này,
+    vì gọi tiếp chỉ làm lệnh chặn kéo dài."""
+    if _state["blocked"]:
+        raise Blocked("bỏ qua: NHNN đang chặn tạm (403) trong lượt chạy này")
     last = None
     for i in range(tries):
+        wait = _state["last"] + PACE_S - time.time()
+        if wait > 0:
+            time.sleep(wait)
         try:
+            _state["calls"] += 1
             r = session.get(url, params=params, timeout=timeout)
+            _state["last"] = time.time()
             if r.status_code == 200:
                 return r
+            if r.status_code in (403, 429):
+                _state["blocked"] = True
+                raise Blocked(f"HTTP {r.status_code}: NHNN chặn tạm vì gọi nhiều – để lượt sau")
             last = f"HTTP {r.status_code}"
         except requests.RequestException as e:
+            _state["last"] = time.time()
             last = f"{type(e).__name__}: {e}"
-        wait = 5 * (i + 1)
-        log(f"  lỗi {last} – thử lại sau {wait}s")
-        time.sleep(wait)
+        log(f"  lỗi {last} – thử lại")
+        time.sleep(10 * (i + 1))
     raise RuntimeError(last)
 
 
@@ -144,25 +163,27 @@ def fields(item):
     return flat, groups
 
 
-def fetch_structure(sid, since=None, page_size=500):
-    items, page = [], 1
-    params = {"pageSize": page_size, "sort": "datePublished:desc",
+def api_page(sid, flt=None, page_size=200):
+    """Một trang của API, mới nhất trước. flt là bộ lọc OData của Liferay."""
+    params = {"pageSize": page_size, "page": 1, "sort": "datePublished:desc",
               "fields": "id,title,datePublished,contentFields"}
-    if since:
-        params["filter"] = f"datePublished ge {since.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-    while True:
-        params["page"] = page
-        r = get(API.format(sid=sid), params=params)
-        if "json" not in r.headers.get("Content-Type", ""):
-            raise RuntimeError("API trả về không phải JSON (có thể bị chặn)")
-        j = r.json()
-        items += j.get("items") or []
-        last = j.get("lastPage") or 1
-        log(f"  cấu trúc {sid}: trang {page}/{last}, {len(items)}/{j.get('totalCount')} bản ghi")
-        if page >= last:
-            break
-        page += 1
-        time.sleep(1)
+    if flt:
+        params["filter"] = flt
+    r = get(API.format(sid=sid), params=params)
+    if "json" not in r.headers.get("Content-Type", ""):
+        raise RuntimeError("API trả về không phải JSON")
+    j = r.json()
+    return j.get("items") or [], j.get("totalCount")
+
+
+def zstamp(x):
+    return x.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def fetch_structure(sid, since=None):
+    """Lấy mọi bản ghi đăng từ `since` (dùng cho số liệu nhỏ hoặc lượt tăng dần)."""
+    flt = f"datePublished ge {zstamp(since)}" if since else None
+    items, _ = api_page(sid, flt, page_size=200)
     return items
 
 
@@ -376,16 +397,56 @@ def run(full=False):
             log(f"LỖI {key}: {e}")
         results[key] = src["trang_thai"]
 
+    backfill = load("backfill", {})
+    budget = {"pages": int(os.environ.get("RADAR_BACKFILL_PAGES", "5"))}
+
     def do_series(key, parser):
         def _():
-            cur = load(key, [])
-            first = full or not cur
-            items = fetch_structure(STRUCTURES[key], None if first else since)
+            sid = STRUCTURES[key]
+            cur = [] if full else load(key, [])
+            bf = {} if full else backfill.get(key, {})
+            # 1) phần mới: một lần gọi cho 45 ngày gần nhất
+            items, _ = api_page(sid, f"datePublished ge {zstamp(since)}")
             rows = merge_rows(cur, parser(items))
+            if not bf.get("oldest_pub"):
+                bf["oldest_pub"] = min((it.get("datePublished") for it in items), default=None)
+            backfill[key] = bf
             save(key, rows)
-            return {"so_ban_ghi": len(rows), "ky_moi_nhat": rows[-1]["d"] if rows else None,
-                    "ky_dau_tien": rows[0]["d"] if rows else None}
+            save("backfill", backfill)
+            return info(key, rows)
         return _
+
+    def info(key, rows):
+        bf = backfill.get(key, {})
+        return {"so_ban_ghi": len(rows), "ky_moi_nhat": rows[-1]["d"] if rows else None,
+                "ky_dau_tien": rows[0]["d"] if rows else None, "lich_su_day_du": bool(bf.get("done"))}
+
+    def do_backfill():
+        """Lùi dần lịch sử theo ngày đăng, vài trang mỗi lượt chạy để không bị tường lửa chặn."""
+        parsers = {"central": parse_central, "reference": parse_reference, "interbank": parse_interbank}
+        done_pages = 0
+        for key, parser in parsers.items():
+            bf = backfill.get(key, {})
+            if health["sources"].get(key, {}).get("trang_thai") != "ok":
+                continue
+            rows = load(key, [])
+            while not bf.get("done") and bf.get("oldest_pub") and budget["pages"] > 0:
+                old_items, left = api_page(STRUCTURES[key], f"datePublished lt {bf['oldest_pub']}")
+                budget["pages"] -= 1
+                done_pages += 1
+                if not old_items:
+                    bf["done"] = True
+                    break
+                rows = merge_rows(rows, parser(old_items))
+                bf["oldest_pub"] = min(it.get("datePublished") for it in old_items)
+                if len(old_items) >= (left or 0):
+                    bf["done"] = True
+                log(f"  {key}: lùi về {bf['oldest_pub'][:10]}, còn {max(0, (left or 0) - len(old_items))} bản ghi cũ")
+                backfill[key] = bf
+                save(key, rows)
+                save("backfill", backfill)
+            health["sources"][key].update(info(key, rows))
+        return done_pages
 
     step("central", do_series("central", parse_central))
     step("reference", do_series("reference", parse_reference))
@@ -428,6 +489,13 @@ def run(full=False):
         save("cpi", rows)
         return {"so_ban_ghi": len(rows), "ky_moi_nhat": rows[-1]["thang"], "ky_dau_tien": rows[0]["thang"]}
     step("cpi", do_cpi)
+
+    try:
+        n = do_backfill()
+        log(f"Lịch sử: đã tải thêm {n} trang")
+    except Exception as e:  # bị chặn giữa chừng thì lượt sau làm tiếp từ chỗ đã dừng
+        log(f"Tạm dừng tải lịch sử: {e}")
+    health["so_lan_goi"] = _state["calls"]
 
     health["lan_chay"] = started.isoformat(timespec="seconds")
     health["xong_luc"] = now_vn().isoformat(timespec="seconds")
